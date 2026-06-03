@@ -559,14 +559,25 @@ def list_tabs(args):
 
 
 def close_tabs(args):
-    # Try stdin if arguments are empty
-    tab_ids = args.tab_ids
-    if len(args.tab_ids) == 0:
-        tab_ids = split_tab_ids(read_stdin().strip())
+    api = MultipleMediatorsAPI(create_clients_from_args(args))
+
+    if getattr(args, 'playing', False):
+        tab_ids = list(get_playing_tab_ids(api))
+        if not tab_ids:
+            print_error('No currently playing tabs found')
+            return 1
+    elif getattr(args, 'muted', False):
+        tab_ids = list(get_muted_tab_ids(api))
+        if not tab_ids:
+            print_error('No muted tabs found')
+            return 1
+    else:
+        tab_ids = args.tab_ids
+        if len(tab_ids) == 0:
+            tab_ids = split_tab_ids(read_stdin().strip())
 
     bruvtab_logger.info('Closing tabs: %s', tab_ids)
-    api = MultipleMediatorsAPI(create_clients_from_args(args))
-    tabs = api.close_tabs(tab_ids)
+    api.close_tabs(tab_ids)
 
 
 def activate_tab(args):
@@ -1143,6 +1154,10 @@ def build_parser():
     parser_close_tabs.set_defaults(func=close_tabs)
     parser_close_tabs_ids = parser_close_tabs.add_argument('tab_ids', type=str, nargs='*',
                                                            help='Tab IDs to close')
+    parser_close_tabs.add_argument('--playing', action='store_true', default=False,
+                                   help='Close all currently audible tabs')
+    parser_close_tabs.add_argument('--muted', action='store_true', default=False,
+                                   help='Close all muted tabs')
 
     parser_activate_tab = subparsers.add_parser(
         'activate',
