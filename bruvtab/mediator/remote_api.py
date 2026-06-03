@@ -69,6 +69,18 @@ class BrowserRemoteAPI:
         self._transport.send(command)
         return self._transport.recv()
 
+    def media_control(self, window_id: int, tab_id: int, action: str):
+        mediator_logger.info('controlling media: window_id=%s, tab_id=%s, action=%s',
+                             window_id, tab_id, action)
+        command = {
+            'name': 'media_control',
+            'window_id': window_id,
+            'tab_id': tab_id,
+            'action': action,
+        }
+        self._transport.send(command)
+        return self._transport.recv()
+
     def close_tabs(self, tab_ids: str):
         """
         :param tab_ids: Comma-separated list of tab IDs to close.

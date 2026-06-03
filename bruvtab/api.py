@@ -259,6 +259,14 @@ class SingleMediatorAPI(object):
         ids = self._post('/update_tabs', files)
         return self.prefix_tabs(ids.splitlines())
 
+    def media_control(self, tab_id: str, action: str):
+        logger.info('SingleMediatorAPI: media_control: %s %s', tab_id, action)
+        prefix, window_id, local_tab_id = split_prefixed_tab_id(tab_id)
+        if prefix != self._prefix:
+            return []
+        result = self._get('/media_control/%s/%s/%s' % (window_id, local_tab_id, action))
+        return self.prefix_tabs(result.splitlines())
+
     def get_words(self, tab_ids, match_regex, join_with):
         words = set()
         match_regex = encode_query(match_regex)
@@ -417,6 +425,14 @@ class MultipleMediatorsAPI(object):
             for u in updates:
                 u['tab_id'] = int_tab_id(u['tab_id'])
             results.extend(api.update_tabs(updates))
+        return results
+
+    def media_control(self, tab_ids, action):
+        results = []
+        for api in self._apis:
+            for tab_id in tab_ids:
+                if api.prefix_match(tab_id):
+                    results.extend(api.media_control(tab_id, action))
         return results
 
     def move_tabs(self, args):

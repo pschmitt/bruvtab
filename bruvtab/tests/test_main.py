@@ -134,6 +134,9 @@ class DummyBrowserRemoteAPI:
     def get_active_tabs(self) -> str:
         return '1.1'
 
+    def media_control(self, window_id: int, tab_id: int, action: str):
+        return ['%s.%s\t%s\t0\t0' % (window_id, tab_id, action)]
+
     def get_words(self, tab_id, match_regex, join_with):
         return ['a', 'b']
 
@@ -288,6 +291,72 @@ class TestActivate(WithMediator):
         ]
         print_error.assert_called_once_with('No currently playing tabs found')
         assert result == 1
+
+
+class TestMediaControls(WithMediator):
+    def test_pause_targets_explicit_tab(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tpause\t1\t1'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            self._run_commands(['pause', 'a.1.2'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'pause'},
+        ]
+        assert output == [b'a.1.2\tpause\t1\t1\n']
+
+    def test_play_defaults_to_active_tabs(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            '1.2',
+            ['1.2\tplay\t1\t1'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            self._run_commands(['play'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'get_active_tabs'},
+            {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'play'},
+        ]
+        assert output == [b'a.1.2\tplay\t1\t1\n']
+
+    def test_mute_defaults_to_playing_tab(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tPlaying\thttps://example.com'],
+            ['1.2'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            self._run_commands(['mute'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'update_tabs', 'updates': [{'tab_id': 2, 'properties': {'muted': True}}]},
+        ]
+        assert output == [b'a.1.2\n']
+
+    def test_unmute_targets_explicit_tab(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            self._run_commands(['unmute', 'a.1.2'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'update_tabs', 'updates': [{'tab_id': 2, 'properties': {'muted': False}}]},
+        ]
+        assert output == [b'a.1.2\n']
 
 
 class TestText(WithMediator):
@@ -655,6 +724,28 @@ class TestList(WithMediator):
             {'name': 'query_tabs', 'query_info': MUTED_QUERY},
         ]
         assert output[-1:] == [b'a.1.2\tExample\thttps://example.com\n']
+
+    def test_tabs_muted_filters_plain_tsv(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [
+                '1.1\tGoogle Search\thttps://google.com/search',
+                '1.2\tExample\thttps://example.com',
+            ],
+            [],
+            ['1.1\tGoogle Search\thttps://google.com/search'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.sys.stdout.buffer.write', output.append):
+            self._run_commands(['tabs', '--muted'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'list_tabs'},
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'query_tabs', 'query_info': MUTED_QUERY},
+        ]
+        assert output[-1:] == [b'a.1.1\tGoogle Search\thttps://google.com/search\n']
 
 
 class TestScreenshot(WithMediator):

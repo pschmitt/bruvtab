@@ -257,6 +257,18 @@ def get_muted_tab_ids(api):
     return get_query_tab_ids(api, {'muted': True})
 
 
+def resolve_muted_tab_id(api):
+    tabs = api.query_tabs({'muted': True})
+    if not tabs:
+        print_error('No muted tabs found')
+        return None
+
+    if len(tabs) > 1:
+        print_error('Multiple tabs are muted; using %s' % tab_id_from_line(tabs[0]))
+
+    return tab_id_from_line(tabs[0])
+
+
 def resolve_playing_tab_id(api):
     tabs = api.query_tabs({'audible': True})
     if not tabs:
@@ -292,6 +304,33 @@ def resolve_tab_selectors(apis, selectors):
         if tab_id is None:
             return None
         tab_ids.append(tab_id)
+    return tab_ids
+
+
+def get_active_tab_ids(apis):
+    tab_ids = []
+    for api in apis:
+        tab_ids.extend(api.get_active_tabs([]))
+    return tab_ids
+
+
+def resolve_control_tab_ids(apis, args, default_target):
+    if args.tab is not None:
+        tab_id = resolve_tab_selector(apis, args.tab)
+        return [] if tab_id is None else [tab_id]
+
+    api = MultipleMediatorsAPI(apis)
+    if args.playing or default_target == 'playing':
+        tab_id = resolve_playing_tab_id(api)
+        return [] if tab_id is None else [tab_id]
+
+    if args.target_muted or default_target == 'muted':
+        tab_id = resolve_muted_tab_id(api)
+        return [] if tab_id is None else [tab_id]
+
+    tab_ids = get_active_tab_ids(apis)
+    if not tab_ids:
+        print_error('No active tabs found')
     return tab_ids
 
 
@@ -444,11 +483,13 @@ def list_tabs(args):
     for selector in args.selectors:
         tabs = [tab for tab in tabs if tab_matches_selector(tab, selector)]
     rich_output = stdout_supports_rich()
-    include_status = args.playing or args.json or rich_output
+    include_status = args.playing or args.muted or args.json or rich_output
     playing_ids = get_playing_tab_ids(api) if include_status else set()
     muted_ids = get_muted_tab_ids(api) if include_status else set()
     if args.playing:
         tabs = [tab for tab in tabs if tab_id_from_line(tab) in playing_ids]
+    if args.muted:
+        tabs = [tab for tab in tabs if tab_id_from_line(tab) in muted_ids]
     if args.json:
         tabs_json = [
             {
@@ -656,6 +697,31 @@ def update_tabs(args):
             updates = [make_update(**updates)]
     bruvtab_logger.info('Updating tabs: %s', updates)
     api = MultipleMediatorsAPI(create_clients_from_args(args))
+    results = api.update_tabs(updates)
+    stdout_buffer_write(marshal(results))
+
+
+def control_media(args):
+    apis = create_clients_from_args(args)
+    default_target = 'playing' if args.media_action == 'pause' else 'active'
+    tab_ids = resolve_control_tab_ids(apis, args, default_target)
+    if not tab_ids:
+        return 1
+
+    api = MultipleMediatorsAPI(apis)
+    results = api.media_control(tab_ids, args.media_action)
+    stdout_buffer_write(marshal(results))
+
+
+def set_tabs_muted(args):
+    apis = create_clients_from_args(args)
+    default_target = 'playing' if args.mute_value else 'active'
+    tab_ids = resolve_control_tab_ids(apis, args, default_target)
+    if not tab_ids:
+        return 1
+
+    api = MultipleMediatorsAPI(apis)
+    updates = [make_update(tabId=tab_id, muted=args.mute_value) for tab_id in tab_ids]
     results = api.update_tabs(updates)
     stdout_buffer_write(marshal(results))
 
@@ -979,6 +1045,8 @@ def build_parser():
                                   help='Optional title or URL fragments to match')
     parser_list_tabs.add_argument('--playing', action='store_true', default=False,
                                   help='Only list tabs that are currently audible')
+    parser_list_tabs.add_argument('--muted', action='store_true', default=False,
+                                  help='Only list tabs that are muted')
 
     parser_close_tabs = subparsers.add_parser(
         'close',
@@ -1006,6 +1074,39 @@ def build_parser():
         help='Display active tab for each client/window in the following format: '
              '"<prefix>.<window_id>.<tab_id>"')
     parser_active_tab.set_defaults(func=show_active_tabs)
+
+    def add_media_target_arguments(command_parser):
+        tab_arg = command_parser.add_argument('tab', type=str, nargs='?',
+                                              help='Optional tab ID, title, or URL fragment to target')
+        command_parser.add_argument('--playing', action='store_true', default=False,
+                                    help='Target the first currently audible tab')
+        command_parser.add_argument('--muted', dest='target_muted', action='store_true', default=False,
+                                    help='Target the first muted tab')
+        return tab_arg
+
+    parser_play = subparsers.add_parser(
+        'play',
+        help='Play audio/video elements in a tab. Defaults to active tabs.')
+    parser_play.set_defaults(func=control_media, media_action='play')
+    parser_play_tab = add_media_target_arguments(parser_play)
+
+    parser_pause = subparsers.add_parser(
+        'pause',
+        help='Pause audio/video elements in a tab. Defaults to the first currently audible tab.')
+    parser_pause.set_defaults(func=control_media, media_action='pause')
+    parser_pause_tab = add_media_target_arguments(parser_pause)
+
+    parser_mute = subparsers.add_parser(
+        'mute',
+        help='Mute a browser tab. Defaults to the first currently audible tab.')
+    parser_mute.set_defaults(func=set_tabs_muted, mute_value=True)
+    parser_mute_tab = add_media_target_arguments(parser_mute)
+
+    parser_unmute = subparsers.add_parser(
+        'unmute',
+        help='Unmute a browser tab. Defaults to active tabs.')
+    parser_unmute.set_defaults(func=set_tabs_muted, mute_value=False)
+    parser_unmute_tab = add_media_target_arguments(parser_unmute)
 
     parser_screenshot = subparsers.add_parser(
         'screenshot',
@@ -1273,6 +1374,10 @@ def build_parser():
         client_action.completer = complete_clients
     parser_close_tabs_ids.completer = complete_tab_ids
     parser_activate_tab_id.completer = complete_tab_ids
+    parser_play_tab.completer = complete_tab_ids
+    parser_pause_tab.completer = complete_tab_ids
+    parser_mute_tab.completer = complete_tab_ids
+    parser_unmute_tab.completer = complete_tab_ids
     parser_screenshot_tab.completer = complete_tab_ids
     parser_index_tabs_ids.completer = complete_tab_ids
     parser_new_tab_target.completer = complete_client_or_window
