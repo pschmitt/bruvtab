@@ -888,8 +888,8 @@ def normalize_global_args(args):
     index = 0
     while index < len(args):
         arg = args[index]
-        if arg == '--json':
-            global_args.append(arg)
+        if arg in ('--json', '-j'):
+            global_args.append('--json')
             index += 1
             continue
         if arg == '--target':
@@ -939,7 +939,7 @@ def add_global_arguments(parser, default=None):
                         default=default, help='Target Chromium clients')
     parser.add_argument('--brave', dest='client_selector', action='store_const', const='brave',
                         default=default, help='Target Brave clients')
-    parser.add_argument('--json', action='store_true', default=False if default is None else default,
+    parser.add_argument('-j', '--json', action='store_true', default=False if default is None else default,
                         help='Pretty JSON output (colored on terminals)')
     parser.add_argument('--no-wrap', action='store_true', default=False if default is None else default,
                         help='Disable wrapping of table columns')

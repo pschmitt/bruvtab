@@ -739,6 +739,16 @@ class TestJsonOutput(TestCase):
 
         assert args.json is True
 
+    def test_parse_args_accepts_json_shorthand_after_subcommand(self):
+        args = parse_args(['tabs', '-j'])
+
+        assert args.json is True
+
+    def test_parse_args_accepts_json_shorthand_before_subcommand(self):
+        args = parse_args(['-j', 'tabs'])
+
+        assert args.json is True
+
     def test_parse_args_accepts_target_after_subcommand(self):
         args = parse_args(['tabs', '--target', '127.0.0.1:4625'])
 
@@ -819,6 +829,7 @@ class TestJsonOutput(TestCase):
         }
 
         assert '--json' in option_strings
+        assert '-j' in option_strings
         assert '--firefox' in option_strings
         assert '--chrome' in option_strings
         assert next(action for action in list_parser._actions if action.dest == 'client_selector').completer == complete_clients
