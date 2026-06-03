@@ -1042,9 +1042,27 @@ class TestRichTableOutput(WithMediator):
         assert 'TITLE' in output.splitlines()[0]
         assert 'URL' in output.splitlines()[0]
         assert 'a.1.1' in output
-        assert 'true' in output
+        assert 'TRUE' in output
         assert 'title' in output
         assert 'url' in output
+
+    def test_tabs_render_false_status_in_table(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.1\ttitle\turl'],
+            [],
+            [],
+        ])
+
+        output = self._render_output(['tabs'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'list_tabs'},
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'query_tabs', 'query_info': MUTED_QUERY},
+        ]
+        assert 'false' in output
 
     def test_clients_rich_output_has_no_title(self):
         self.mediator.transport.received_extend(['mocked'])

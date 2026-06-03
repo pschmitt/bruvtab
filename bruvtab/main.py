@@ -69,6 +69,7 @@ from rich.json import JSON
 from rich import box
 from rich.table import Table
 from rich.console import Console
+from rich.text import Text
 from rich_argparse import RichHelpFormatter
 
 from bruvtab.api import MultipleMediatorsAPI
@@ -494,7 +495,9 @@ def print_table(columns, rows, right_aligned_columns=None, no_wrap=False):
     for row in rows:
         formatted_row = []
         for i, value in enumerate(row):
-            if columns[i] == 'URL' and str(value).startswith(('http://', 'https://')):
+            if columns[i] in ('Playing', 'Muted') and isinstance(value, bool):
+                formatted_row.append(Text('TRUE', style='bold green') if value else Text('false', style='dim red'))
+            elif columns[i] == 'URL' and str(value).startswith(('http://', 'https://')):
                 formatted_row.append(f"[link={value}]{value}[/link]")
             else:
                 formatted_row.append(str(value))
@@ -542,8 +545,8 @@ def list_tabs(args):
         rows = [
             [
                 tab_id,
-                'true' if tab_id in playing_ids else '',
-                'true' if tab_id in muted_ids else '',
+                tab_id in playing_ids,
+                tab_id in muted_ids,
                 title,
                 url,
             ]
