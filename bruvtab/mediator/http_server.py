@@ -1,4 +1,5 @@
 import os
+from json import dumps
 from json import loads
 from threading import Thread
 from urllib.parse import unquote_plus
@@ -131,6 +132,8 @@ class MediatorHttpServer:
 
     def media_control(self, window_id, tab_id, action):
         result = self.remote_api.media_control(window_id, tab_id, action)
+        if isinstance(result, dict):
+            return dumps(result)
         return '\n'.join(result)
 
     def close_tabs(self, tab_ids):

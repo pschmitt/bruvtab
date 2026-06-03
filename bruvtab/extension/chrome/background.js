@@ -391,6 +391,31 @@ class ChromeTabs extends BrowserTabs {
             return html.replace(delimiterRegex, replaceWith);
           }
 
+          if (code.includes("document.querySelectorAll('audio, video')")) {
+            const actionMatch = code.match(/const action = "([^"]+)";/);
+            if (!actionMatch) {
+              throw new Error(`Unsupported media control script: ${code}`);
+            }
+            const action = actionMatch[1];
+            const media = Array.from(document.querySelectorAll('audio, video'));
+            let changed = 0;
+            for (const element of media) {
+              if (action === 'play') {
+                const promise = element.play();
+                if (promise && promise.catch) {
+                  promise.catch(error => console.log('Could not play media element:', error));
+                }
+                changed += 1;
+              } else if (action === 'pause') {
+                if (!element.paused) {
+                  element.pause();
+                  changed += 1;
+                }
+              }
+            }
+            return action + "\t" + changed + "\t" + media.length;
+          }
+
           throw new Error(`Unsupported script: ${code}`);
         },
         args: [script]
@@ -771,6 +796,44 @@ function updateTabs(updates) {
   });
 }
 
+function getMediaControlScript(action) {
+  return `(() => {
+    const action = ${JSON.stringify(action)};
+    const media = Array.from(document.querySelectorAll('audio, video'));
+    let changed = 0;
+    for (const element of media) {
+      if (action === 'play') {
+        const promise = element.play();
+        if (promise && promise.catch) {
+          promise.catch(error => console.log('Could not play media element:', error));
+        }
+        changed += 1;
+      } else if (action === 'pause') {
+        if (!element.paused) {
+          element.pause();
+          changed += 1;
+        }
+      }
+    }
+    return action + "\\t" + changed + "\\t" + media.length;
+  })();`;
+}
+
+function mediaControl(window_id, tab_id, action) {
+  const script = getMediaControlScript(action);
+  browserTabs.runScript(tab_id, script, null,
+    (result, _payload) => {
+      result = listOr(result, [`${action}\t0\t0`]);
+      port.postMessage([`${window_id}.${tab_id}\t${result[0]}`]);
+    },
+    (error, _payload) => {
+      const message = `mediaControl failed: tab_id=${tab_id}, action=${action}, error=${error}`;
+      console.error(message);
+      port.postMessage({error: message, window_id: window_id, tab_id: tab_id, action: action});
+    }
+  );
+}
+
 function activateTab(tab_id, focused) {
   browserTabs.activate(tab_id, focused);
 }
@@ -1091,6 +1154,11 @@ function handleNativeMessage(command) {
   else if (command['name'] == 'update_tabs') {
     console.log('Updating tabs:', command['updates']);
     updateTabs(command['updates']);
+  }
+
+  else if (command['name'] == 'media_control') {
+    console.log('Controlling media:', command['window_id'], command['tab_id'], command['action']);
+    mediaControl(command['window_id'], command['tab_id'], command['action']);
   }
 
   else if (command['name'] == 'activate_tab') {

@@ -629,7 +629,7 @@ def query_tabs(args):
         queryInfo = d['info']
     else:
         queryInfo = {k: v for k, v in d.items()
-                     if v is not None and k not in ['func', 'info', 'target_hosts', 'client_selector']}
+                     if v is not None and k not in ['func', 'info', 'target_hosts', 'client_selector', 'debug']}
     api = MultipleMediatorsAPI(create_clients_from_args(args))
     for tab in api.query_tabs(queryInfo):
         print(tab)
@@ -719,6 +719,21 @@ def update_tabs(args):
     stdout_buffer_write(marshal(results))
 
 
+def split_error_results(results):
+    ok_results = []
+    errors = []
+    for result in results:
+        if result.startswith('ERROR\t'):
+            parts = result.split('\t', 2)
+            if len(parts) == 3:
+                errors.append((parts[1], parts[2]))
+            else:
+                errors.append(('', result))
+            continue
+        ok_results.append(result)
+    return ok_results, errors
+
+
 def control_media(args):
     apis = create_clients_from_args(args)
     default_target = 'playing' if args.media_action == 'pause' else 'active'
@@ -728,7 +743,16 @@ def control_media(args):
 
     api = MultipleMediatorsAPI(apis)
     results = api.media_control(tab_ids, args.media_action)
-    stdout_buffer_write(marshal(results))
+    results, errors = split_error_results(results)
+    for tab_id, error in errors:
+        if args.debug:
+            print_error('%s: %s' % (tab_id, error))
+        else:
+            print_error('Could not %s media in %s; rerun with --debug for details' % (args.media_action, tab_id))
+    if results:
+        stdout_buffer_write(marshal(results))
+    if errors:
+        return 1
 
 
 def set_tabs_muted(args):
@@ -976,6 +1000,10 @@ def normalize_global_args(args):
             global_args.append('--json')
             index += 1
             continue
+        if arg == '--debug':
+            global_args.append(arg)
+            index += 1
+            continue
         if arg == '--target':
             if index + 1 >= len(args):
                 remaining_args.append(arg)
@@ -1025,6 +1053,8 @@ def add_global_arguments(parser, default=None):
                         default=default, help='Target Brave clients')
     parser.add_argument('-j', '--json', action='store_true', default=False if default is None else default,
                         help='Pretty JSON output (colored on terminals)')
+    parser.add_argument('--debug', action='store_true', default=False if default is None else default,
+                        help='Print debug details for command failures')
     parser.add_argument('--no-wrap', action='store_true', default=False if default is None else default,
                         help='Disable wrapping of table columns')
     return parser_client

@@ -265,6 +265,14 @@ class SingleMediatorAPI(object):
         if prefix != self._prefix:
             return []
         result = self._get('/media_control/%s/%s/%s' % (window_id, local_tab_id, action))
+        try:
+            data = json.loads(result)
+            if isinstance(data, Mapping) and data.get('error'):
+                return ['ERROR\t%s\t%s' % (tab_id, data['error'])]
+        except json.JSONDecodeError:
+            pass
+        if result == '<ERROR>':
+            return ['ERROR\t%s\tMediator returned <ERROR>; see /tmp/bruvtab_mediator.log' % tab_id]
         return self.prefix_tabs(result.splitlines())
 
     def get_words(self, tab_ids, match_regex, join_with):

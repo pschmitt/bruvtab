@@ -310,6 +310,39 @@ class TestMediaControls(WithMediator):
         ]
         assert output == [b'a.1.2\tpause\t1\t1\n']
 
+    def test_pause_reports_media_control_error(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            {'error': 'Unknown command: media_control'},
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            with patch('bruvtab.main.print_error') as print_error:
+                result = self._run_commands(['pause', 'a.1.2'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'pause'},
+        ]
+        print_error.assert_called_once_with('Could not pause media in a.1.2; rerun with --debug for details')
+        assert output == []
+        assert result == 1
+
+    def test_pause_debug_reports_raw_media_control_error(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            {'error': 'Unknown command: media_control'},
+        ])
+
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['pause', 'a.1.2', '--debug'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'pause'},
+        ]
+        print_error.assert_called_once_with('a.1.2: Unknown command: media_control')
+        assert result == 1
+
     def test_play_defaults_to_active_tabs(self):
         self.mediator.transport.received_extend([
             'mocked',
@@ -840,6 +873,11 @@ class TestJsonOutput(TestCase):
         args = parse_args(['-j', 'tabs'])
 
         assert args.json is True
+
+    def test_parse_args_accepts_debug_after_subcommand(self):
+        args = parse_args(['tabs', '--debug'])
+
+        assert args.debug is True
 
     def test_parse_args_accepts_target_after_subcommand(self):
         args = parse_args(['tabs', '--target', '127.0.0.1:4625'])

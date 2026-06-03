@@ -495,8 +495,9 @@ function mediaControl(window_id, tab_id, action) {
       port.postMessage([`${window_id}.${tab_id}\t${result[0]}`]);
     },
     (error, _payload) => {
-      console.log(`mediaControl: tab_id=${tab_id}, could not run script (${script}): ${error}`);
-      port.postMessage([`${window_id}.${tab_id}\t${action}\t0\t0`]);
+      const message = `mediaControl failed: tab_id=${tab_id}, action=${action}, error=${error}`;
+      console.error(message);
+      port.postMessage({error: message, window_id: window_id, tab_id: tab_id, action: action});
     }
   );
 }
