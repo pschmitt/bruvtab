@@ -229,13 +229,44 @@ def tab_id_from_line(line):
     return line.split('\t', 1)[0]
 
 
-def tab_matches_selector(line, selector):
+def tab_fields_from_line(line):
     parts = line.split('\t', 2)
     if len(parts) < 3:
+        return None
+    return parts
+
+
+def tab_matches_selector(line, selector):
+    parts = tab_fields_from_line(line)
+    if parts is None:
         return False
     _tab_id, title, url = parts
     selector = selector.lower()
     return selector in title.lower() or selector in url.lower()
+
+
+def get_query_tab_ids(api, query):
+    return {tab_id_from_line(tab) for tab in api.query_tabs(query)}
+
+
+def get_playing_tab_ids(api):
+    return get_query_tab_ids(api, {'audible': True})
+
+
+def get_muted_tab_ids(api):
+    return get_query_tab_ids(api, {'muted': True})
+
+
+def resolve_playing_tab_id(api):
+    tabs = api.query_tabs({'audible': True})
+    if not tabs:
+        print_error('No currently playing tabs found')
+        return None
+
+    if len(tabs) > 1:
+        print_error('Multiple tabs are currently playing; using %s' % tab_id_from_line(tabs[0]))
+
+    return tab_id_from_line(tabs[0])
 
 
 def resolve_tab_selector(apis, selector):
@@ -412,15 +443,36 @@ def list_tabs(args):
     tabs = api.list_tabs([])
     for selector in args.selectors:
         tabs = [tab for tab in tabs if tab_matches_selector(tab, selector)]
+    rich_output = stdout_supports_rich()
+    include_status = args.playing or args.json or rich_output
+    playing_ids = get_playing_tab_ids(api) if include_status else set()
+    muted_ids = get_muted_tab_ids(api) if include_status else set()
+    if args.playing:
+        tabs = [tab for tab in tabs if tab_id_from_line(tab) in playing_ids]
     if args.json:
         tabs_json = [
-            {"id": x[0], "title": x[1], "url": x[2]}
-            for x in [y.split("\t") for y in tabs]
+            {
+                "id": tab_id,
+                "title": title,
+                "url": url,
+                "playing": tab_id in playing_ids,
+                "muted": tab_id in muted_ids,
+            }
+            for tab_id, title, url in [tab_fields_from_line(y) for y in tabs]
         ]
         print_json(tabs_json)
-    elif stdout_supports_rich():
-        rows = [tab.split('\t', 2) for tab in tabs]
-        print_table(['ID', 'Title', 'URL'], rows, no_wrap=args.no_wrap)
+    elif rich_output:
+        rows = [
+            [
+                tab_id,
+                'true' if tab_id in playing_ids else '',
+                'true' if tab_id in muted_ids else '',
+                title,
+                url,
+            ]
+            for tab_id, title, url in [tab_fields_from_line(tab) for tab in tabs]
+        ]
+        print_table(['ID', 'Playing', 'Muted', 'Title', 'URL'], rows, no_wrap=args.no_wrap)
     else:
         message = "\n".join(tabs) + "\n"
         sys.stdout.buffer.write(message.encode("utf8"))
@@ -439,7 +491,18 @@ def close_tabs(args):
 
 def activate_tab(args):
     bruvtab_logger.info('Activating tab: %s', args.tab_id)
-    api = MultipleMediatorsAPI(create_clients_from_args(args))
+    apis = create_clients_from_args(args)
+    api = MultipleMediatorsAPI(apis)
+    if args.playing:
+        tab_id = resolve_playing_tab_id(api)
+        if tab_id is None:
+            return 1
+        args.tab_id = [tab_id]
+    elif args.tab_id is None:
+        print_error('Please specify a tab ID or use --playing')
+        return 1
+    else:
+        args.tab_id = [args.tab_id]
     api.activate_tab(args.tab_id, args.focused)
 
 
@@ -914,6 +977,8 @@ def build_parser():
     parser_list_tabs.set_defaults(func=list_tabs)
     parser_list_tabs.add_argument('selectors', type=str, nargs='*',
                                   help='Optional title or URL fragments to match')
+    parser_list_tabs.add_argument('--playing', action='store_true', default=False,
+                                  help='Only list tabs that are currently audible')
 
     parser_close_tabs = subparsers.add_parser(
         'close',
@@ -929,10 +994,12 @@ def build_parser():
         help='Activate given tab ID. Tab ID should be in the following format: '
              '"<prefix>.<window_id>.<tab_id>"')
     parser_activate_tab.set_defaults(func=activate_tab)
-    parser_activate_tab_id = parser_activate_tab.add_argument('tab_id', type=str, nargs=1,
+    parser_activate_tab_id = parser_activate_tab.add_argument('tab_id', type=str, nargs='?',
                                                               help='Tab ID to activate')
     parser_activate_tab.add_argument('--focused', action='store_const', const=True, default=None,
                                      help='make browser focused after tab activation (default: False)')
+    parser_activate_tab.add_argument('--playing', action='store_true', default=False,
+                                     help='Activate the first currently audible tab')
 
     parser_active_tab = subparsers.add_parser(
         'active',

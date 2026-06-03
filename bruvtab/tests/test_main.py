@@ -33,6 +33,11 @@ from bruvtab.tests.utils import assert_file_absent
 from bruvtab.tests.utils import assert_file_contents
 from bruvtab.tests.utils import assert_file_not_empty
 from bruvtab.tests.utils import assert_sqlite3_table_contents
+from bruvtab.utils import encode_query
+
+
+AUDIBLE_QUERY = encode_query('{"audible": true}')
+MUTED_QUERY = encode_query('{"muted": true}')
 
 
 class MockedLoggingTransport(Transport):
@@ -254,6 +259,35 @@ class TestActivate(WithMediator):
         assert self.mediator.transport.sent == [
             {'name': 'activate_tab', 'tab_id': 2, 'focused': True}
         ]
+
+    def test_activate_playing_ok(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tPlaying\thttps://example.com'],
+        ])
+
+        self._run_commands(['activate', '--playing'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'activate_tab', 'tab_id': 2, 'focused': False},
+        ]
+
+    def test_activate_playing_reports_no_match(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [],
+        ])
+
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['activate', '--playing'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+        ]
+        print_error.assert_called_once_with('No currently playing tabs found')
+        assert result == 1
 
 
 class TestText(WithMediator):
@@ -575,6 +609,8 @@ class TestList(WithMediator):
                 '1.1\tGoogle Search\thttps://google.com/search',
                 '1.2\tExample\thttps://example.com',
             ],
+            ['1.1\tGoogle Search\thttps://google.com/search'],
+            ['1.1\tGoogle Search\thttps://google.com/search'],
         ])
 
         with patch('bruvtab.main.stdout_supports_rich', return_value=False):
@@ -583,16 +619,42 @@ class TestList(WithMediator):
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'list_tabs'},
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'query_tabs', 'query_info': MUTED_QUERY},
         ]
         mocked.assert_called_once_with(
             '[\n'
             '  {\n'
             '    "id": "a.1.1",\n'
             '    "title": "Google Search",\n'
-            '    "url": "https://google.com/search"\n'
+            '    "url": "https://google.com/search",\n'
+            '    "playing": true,\n'
+            '    "muted": true\n'
             '  }\n'
             ']'
         )
+
+    def test_tabs_playing_filters_plain_tsv(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [
+                '1.1\tGoogle Search\thttps://google.com/search',
+                '1.2\tExample\thttps://example.com',
+            ],
+            ['1.2\tExample\thttps://example.com'],
+            [],
+        ])
+
+        output = []
+        with patch('bruvtab.main.sys.stdout.buffer.write', output.append):
+            self._run_commands(['tabs', '--playing'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'list_tabs'},
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'query_tabs', 'query_info': MUTED_QUERY},
+        ]
+        assert output[-1:] == [b'a.1.2\tExample\thttps://example.com\n']
 
 
 class TestScreenshot(WithMediator):
@@ -775,6 +837,8 @@ class TestRichTableOutput(WithMediator):
         self.mediator.transport.received_extend([
             'mocked',
             ['1.1\ttitle\turl'],
+            ['1.1\ttitle\turl'],
+            ['1.1\ttitle\turl'],
         ])
 
         output = self._render_output(['tabs'])
@@ -782,11 +846,16 @@ class TestRichTableOutput(WithMediator):
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'list_tabs'},
+            {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
+            {'name': 'query_tabs', 'query_info': MUTED_QUERY},
         ]
         assert 'ID' in output.splitlines()[0]
+        assert 'PLAYING' in output.splitlines()[0]
+        assert 'MUTED' in output.splitlines()[0]
         assert 'TITLE' in output.splitlines()[0]
         assert 'URL' in output.splitlines()[0]
         assert 'a.1.1' in output
+        assert 'true' in output
         assert 'title' in output
         assert 'url' in output
 
