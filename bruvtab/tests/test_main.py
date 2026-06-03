@@ -21,6 +21,7 @@ from bruvtab.main import build_parser
 from bruvtab.main import complete_clients
 from bruvtab.main import complete_client_or_window
 from bruvtab.main import complete_open_args
+from bruvtab.main import complete_playing_tab_ids
 from bruvtab.main import complete_tab_ids
 from bruvtab.main import completion_validator
 from bruvtab.main import parse_args
@@ -885,6 +886,20 @@ class TestJsonOutput(TestCase):
             'a.1.3': 'Alpha Two | https://example.com/a2',
         }
 
+    @patch('bruvtab.main._query_tabs_for_completion')
+    def test_complete_playing_tab_ids_uses_audible_query(self, mocked_tabs):
+        mocked_tabs.return_value = [
+            'a.1.2\tPlaying One\thttps://example.com/a1',
+            'b.2.1\tPlaying Two\thttps://example.com/b1',
+        ]
+
+        matches = complete_playing_tab_ids('a', Namespace(target_hosts=None, client_selector=None))
+
+        mocked_tabs.assert_called_once_with(Namespace(target_hosts=None, client_selector=None), {'audible': True})
+        assert matches == {
+            'a.1.2': 'Playing One | https://example.com/a1',
+        }
+
     @patch('bruvtab.main.complete_clients')
     @patch('bruvtab.main.complete_windows')
     def test_complete_open_args_only_suggests_targets_for_first_argument(self, mocked_windows, mocked_clients):
@@ -906,6 +921,8 @@ class TestJsonOutput(TestCase):
 
         assert next(action for action in parser._actions if action.dest == 'client_selector').completer == complete_clients
         assert next(action for action in subparsers.choices['close']._actions if action.dest == 'tab_ids').completer == complete_tab_ids
+        assert next(action for action in subparsers.choices['pause']._actions if action.dest == 'tab').completer == complete_playing_tab_ids
+        assert next(action for action in subparsers.choices['mute']._actions if action.dest == 'tab').completer == complete_playing_tab_ids
         assert next(action for action in subparsers.choices['new']._actions if action.dest == 'prefix_window_id').completer == complete_client_or_window
 
     def test_parser_exposes_global_options_on_subcommands_for_completion(self):

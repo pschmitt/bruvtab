@@ -368,13 +368,23 @@ def _list_tabs_for_completion(parsed_args):
     return MultipleMediatorsAPI(apis).list_tabs([])
 
 
+def _query_tabs_for_completion(parsed_args, query):
+    apis = create_clients(
+        getattr(parsed_args, 'target_hosts', None),
+        getattr(parsed_args, 'client_selector', None),
+    )
+    if not apis:
+        return []
+    return MultipleMediatorsAPI(apis).query_tabs(query)
+
+
 def _tab_completion_matches(tab_id, prefix):
     return _completion_matches(tab_id, prefix)
 
 
-def complete_tab_ids(prefix, parsed_args, **_kwargs):
+def _complete_tab_lines(prefix, tab_lines):
     matches = {}
-    for line in _list_tabs_for_completion(parsed_args):
+    for line in tab_lines:
         parts = line.split('\t', 2)
         if len(parts) < 3:
             continue
@@ -383,6 +393,14 @@ def complete_tab_ids(prefix, parsed_args, **_kwargs):
             continue
         matches[tab_id] = _completion_description(title, url)
     return matches
+
+
+def complete_tab_ids(prefix, parsed_args, **_kwargs):
+    return _complete_tab_lines(prefix, _list_tabs_for_completion(parsed_args))
+
+
+def complete_playing_tab_ids(prefix, parsed_args, **_kwargs):
+    return _complete_tab_lines(prefix, _query_tabs_for_completion(parsed_args, {'audible': True}))
 
 
 def complete_clients(prefix, parsed_args, **_kwargs):
@@ -1375,8 +1393,8 @@ def build_parser():
     parser_close_tabs_ids.completer = complete_tab_ids
     parser_activate_tab_id.completer = complete_tab_ids
     parser_play_tab.completer = complete_tab_ids
-    parser_pause_tab.completer = complete_tab_ids
-    parser_mute_tab.completer = complete_tab_ids
+    parser_pause_tab.completer = complete_playing_tab_ids
+    parser_mute_tab.completer = complete_playing_tab_ids
     parser_unmute_tab.completer = complete_tab_ids
     parser_screenshot_tab.completer = complete_tab_ids
     parser_index_tabs_ids.completer = complete_tab_ids
