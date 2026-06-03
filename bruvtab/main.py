@@ -97,6 +97,7 @@ from bruvtab.search.index import index
 from bruvtab.search.query import query
 from bruvtab.ui import print_error
 from bruvtab.ui import print_info
+from bruvtab.ui import print_warning
 from bruvtab.ui import stdout_console
 from bruvtab.ui import stdout_supports_rich
 from bruvtab.utils import get_file_size
@@ -219,6 +220,23 @@ def filter_apis_by_tab_id(apis, tab_id):
     prefix, _window_id, _tab_id = tab_id.split('.')
     prefix += '.'
     return [api for api in apis if api._prefix == prefix]
+
+
+def api_for_tab_id(apis, tab_id):
+    prefix, _window_id, _tab_id = tab_id.split('.')
+    prefix += '.'
+    for api in apis:
+        if api._prefix == prefix:
+            return api
+    return None
+
+
+def describe_tab_target(apis, tab_id):
+    api = api_for_tab_id(apis, tab_id)
+    if api is None:
+        return tab_id
+    browser = api.browser
+    return '%s (%s)' % (tab_id, browser)
 
 
 def is_tab_id(value):
@@ -734,6 +752,14 @@ def split_error_results(results):
     return ok_results, errors
 
 
+def log_tab_action(action, apis, tab_ids, debug=False):
+    for tab_id in tab_ids:
+        print_warning('%s %s' % (action, describe_tab_target(apis, tab_id)))
+    if debug:
+        clients = ', '.join(str(api) for api in apis)
+        print_warning('Clients: %s' % clients)
+
+
 def control_media(args):
     apis = create_clients_from_args(args)
     default_target = 'playing' if args.media_action == 'pause' else 'active'
@@ -741,9 +767,14 @@ def control_media(args):
     if not tab_ids:
         return 1
 
+    action = 'Pausing' if args.media_action == 'pause' else 'Playing'
+    log_tab_action('%s media in' % action, apis, tab_ids, args.debug)
     api = MultipleMediatorsAPI(apis)
     results = api.media_control(tab_ids, args.media_action)
     results, errors = split_error_results(results)
+    if args.debug:
+        for result in results:
+            print_warning('Result: %s' % result)
     for tab_id, error in errors:
         if args.debug:
             print_error('%s: %s' % (tab_id, error))
@@ -762,9 +793,14 @@ def set_tabs_muted(args):
     if not tab_ids:
         return 1
 
+    action = 'Muting' if args.mute_value else 'Unmuting'
+    log_tab_action(action, apis, tab_ids, args.debug)
     api = MultipleMediatorsAPI(apis)
     updates = [make_update(tabId=tab_id, muted=args.mute_value) for tab_id in tab_ids]
     results = api.update_tabs(updates)
+    if args.debug:
+        for result in results:
+            print_warning('Result: %s' % result)
     stdout_buffer_write(marshal(results))
 
 

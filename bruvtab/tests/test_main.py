@@ -303,11 +303,13 @@ class TestMediaControls(WithMediator):
 
         output = []
         with patch('bruvtab.main.stdout_buffer_write', output.append):
-            self._run_commands(['pause', 'a.1.2'])
+            with patch('bruvtab.main.print_warning') as print_warning:
+                self._run_commands(['pause', 'a.1.2'])
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'pause'},
         ]
+        print_warning.assert_called_once_with('Pausing media in a.1.2 (mocked)')
         assert output == [b'a.1.2\tpause\t1\t1\n']
 
     def test_pause_reports_media_control_error(self):
@@ -335,11 +337,14 @@ class TestMediaControls(WithMediator):
         ])
 
         with patch('bruvtab.main.print_error') as print_error:
-            result = self._run_commands(['pause', 'a.1.2', '--debug'])
+            with patch('bruvtab.main.print_warning') as print_warning:
+                result = self._run_commands(['pause', 'a.1.2', '--debug'])
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'pause'},
         ]
+        print_warning.assert_any_call('Pausing media in a.1.2 (mocked)')
+        assert any(call.args[0].startswith('Clients: a.') for call in print_warning.call_args_list)
         print_error.assert_called_once_with('a.1.2: Unknown command: media_control')
         assert result == 1
 
@@ -352,12 +357,14 @@ class TestMediaControls(WithMediator):
 
         output = []
         with patch('bruvtab.main.stdout_buffer_write', output.append):
-            self._run_commands(['play'])
+            with patch('bruvtab.main.print_warning') as print_warning:
+                self._run_commands(['play'])
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'get_active_tabs'},
             {'name': 'media_control', 'window_id': 1, 'tab_id': 2, 'action': 'play'},
         ]
+        print_warning.assert_called_once_with('Playing media in a.1.2 (mocked)')
         assert output == [b'a.1.2\tplay\t1\t1\n']
 
     def test_mute_defaults_to_playing_tab(self):
@@ -369,12 +376,14 @@ class TestMediaControls(WithMediator):
 
         output = []
         with patch('bruvtab.main.stdout_buffer_write', output.append):
-            self._run_commands(['mute'])
+            with patch('bruvtab.main.print_warning') as print_warning:
+                self._run_commands(['mute'])
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'query_tabs', 'query_info': AUDIBLE_QUERY},
             {'name': 'update_tabs', 'updates': [{'tab_id': 2, 'properties': {'muted': True}}]},
         ]
+        print_warning.assert_called_once_with('Muting a.1.2 (mocked)')
         assert output == [b'a.1.2\n']
 
     def test_unmute_targets_explicit_tab(self):
@@ -385,11 +394,32 @@ class TestMediaControls(WithMediator):
 
         output = []
         with patch('bruvtab.main.stdout_buffer_write', output.append):
-            self._run_commands(['unmute', 'a.1.2'])
+            with patch('bruvtab.main.print_warning') as print_warning:
+                self._run_commands(['unmute', 'a.1.2'])
         self._assert_init()
         assert self.mediator.transport.sent == [
             {'name': 'update_tabs', 'updates': [{'tab_id': 2, 'properties': {'muted': False}}]},
         ]
+        print_warning.assert_called_once_with('Unmuting a.1.2 (mocked)')
+        assert output == [b'a.1.2\n']
+
+    def test_unmute_debug_reports_client_and_result(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2'],
+        ])
+
+        output = []
+        with patch('bruvtab.main.stdout_buffer_write', output.append):
+            with patch('bruvtab.main.print_warning') as print_warning:
+                self._run_commands(['unmute', 'a.1.2', '--debug'])
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'update_tabs', 'updates': [{'tab_id': 2, 'properties': {'muted': False}}]},
+        ]
+        print_warning.assert_any_call('Unmuting a.1.2 (mocked)')
+        print_warning.assert_any_call('Result: a.1.2')
+        assert any(call.args[0].startswith('Clients: a.') for call in print_warning.call_args_list)
         assert output == [b'a.1.2\n']
 
 
