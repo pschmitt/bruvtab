@@ -1,6 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "forkProcessing": "enabled",
+  "labels": [
+    "dependencies"
+  ],
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    ":semanticCommits"
+  ],
+  "nix": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "on monday"
+    ]
+  }
 }
