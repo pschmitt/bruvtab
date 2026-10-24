@@ -1,0 +1,19 @@
+name: lint
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  lint-extension:
+    uses: pschmitt/ci-workflows/.github/workflows/extension-lint.yaml@main
+    with:
+      build-command: 'true'
+      firefox-dir: bruvtab/extension/firefox
+  release-script:
+    uses: pschmitt/ci-workflows/.github/workflows/release-script.yaml@main

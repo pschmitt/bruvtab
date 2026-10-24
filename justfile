@@ -46,3 +46,12 @@ reset:
   pkill node || true
   pkill Xvfb || true
   pkill firefox || true
+
+# Bump the version, date the changelog, commit and push.
+release-prepare version:
+  tools/release.sh prepare '{{ version }}'
+
+# Tag the release once CI is green for HEAD (needs a GPG-signed tag); the release
+# workflow publishes the Python packages and the signed browser extensions.
+release-tag:
+  tools/release.sh tag

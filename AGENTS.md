@@ -42,6 +42,11 @@ rebases the ones that conflict; wait for it), and let CI finish on the
 resulting `main` before tagging. Leave out PRs with failing checks or major
 bumps that need real work, and say which.
 
-Tag the release (`git tag -s X.Y.Z`); the release workflow signs and publishes
-the browser extensions, then `pin-release-assets` commits their hashes to
-`browser/packages/metadata.json` on `main`.
+Release with `just release-prepare X.Y.Z` (bumps `bruvtab/__version__.py` and
+the extension manifests, dates the changelog, commits and pushes), then
+`just release-tag` (waits for green CI on HEAD, then pushes the GPG-signed
+`vX.Y.Z` tag; unlock GPG first). `tools/release.sh` is a verbatim copy of the
+shared script in `pschmitt/ci-workflows`, with the Python specifics in
+`tools/release-hooks.sh`. The release workflow publishes the Python packages and
+the browser extensions, then the shared pin workflow commits their hashes to
+`browser/packages/metadata.json` on `main`, which `flake.nix` reads.

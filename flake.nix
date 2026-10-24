@@ -49,11 +49,11 @@
           pkgs = import nixpkgs { inherit system; };
           py = pkgs.python3Packages;
           chromeCrxAsset = pkgs.fetchurl {
-            url = "https://github.com/pschmitt/bruvtab/releases/download/${chromeCrxVersion}/bruvtab-chrome-${chromeCrxVersion}.crx";
+            url = "https://github.com/pschmitt/bruvtab/releases/download/${pins.tag}/bruvtab-chrome-${chromeCrxVersion}.crx";
             sha256 = chromeCrxHash;
           };
           firefoxXpiAsset = pkgs.fetchurl {
-            url = "https://github.com/pschmitt/bruvtab/releases/download/${firefoxXpiVersion}/bruvtab-firefox-${firefoxXpiVersion}.xpi";
+            url = "https://github.com/pschmitt/bruvtab/releases/download/${pins.tag}/bruvtab-firefox-${firefoxXpiVersion}.xpi";
             sha256 = firefoxXpiHash;
           };
           chromeCrx = pkgs.runCommand "bruvtab-chrome-crx-${chromeCrxVersion}" { } ''

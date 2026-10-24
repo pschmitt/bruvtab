@@ -3,11 +3,11 @@ name: GitHub Release
 on:
   push:
     tags:
-      - "*"
+      - "v*"
 
 env:
   CHROME_EXTENSION_ID: edpgjheobdplebiikjgjgpmonakingef
-  VERSION: ${{ github.ref_name }}
+  TAG: ${{ github.ref_name }}
 
 jobs:
   changelog:
@@ -17,44 +17,38 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Generate changelog
+      - name: Release notes from CHANGELOG.md
         id: changelog
         shell: bash
         run: |
-          current_tag="$(git describe --tags --abbrev=0)"
-
-          if git describe --tags --abbrev=0 "${current_tag}^" >/dev/null 2>&1
+          version="${TAG#v}"
+          notes="$(awk -v heading="## [${version}]" '
+            index($0, heading) == 1 { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)"
+          if [[ -z "${notes//[[:space:]]/}" ]]
           then
-            previous_tag="$(git describe --tags --abbrev=0 "${current_tag}^")"
-          else
-            previous_tag="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
-          fi
-
-          changelog="$(
-            git log "${previous_tag}..${current_tag}" \
-              --oneline \
-              --no-merges \
-              --pretty=format:"%h %s"
-          )"
-
-          if [[ -z "${changelog}" ]]
-          then
-            changelog="No changes recorded."
+            echo "::error::CHANGELOG.md has no section for ${version}"
+            exit 1
           fi
 
           delimiter="$(openssl rand -hex 12)"
           {
             echo "changelog<<${delimiter}"
-            echo "${changelog}"
+            echo "${notes}"
             echo "${delimiter}"
           } >> "${GITHUB_OUTPUT}"
 
   python-distributions:
     runs-on: ubuntu-latest
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -83,6 +77,11 @@ jobs:
   chrome-browser-artifacts:
     runs-on: ubuntu-latest
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -153,6 +152,11 @@ jobs:
   firefox-amo:
     runs-on: ubuntu-latest
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -195,9 +199,12 @@ jobs:
 
   firefox-self-signed:
     runs-on: ubuntu-latest
-    env:
-      SELF_FIREFOX_VERSION: ${{ github.ref_name }}.1
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -250,6 +257,11 @@ jobs:
       - chrome-browser-artifacts
     continue-on-error: true
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Download Chrome browser artifacts
         uses: actions/download-artifact@v4
         with:
@@ -298,6 +310,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Version
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
+
       - name: Download Python distributions
         uses: actions/download-artifact@v4
         with:
@@ -334,3 +351,15 @@ jobs:
             dist/browser/*.xml
             dist/browser/*.zip
             dist/browser/*.xpi
+
+  # The Nix package fetches the signed packages from the release by hash.
+  packages:
+    needs:
+      - release
+    permissions:
+      contents: write
+    uses: pschmitt/ci-workflows/.github/workflows/pin-release.yaml@main
+    with:
+      tag: ${{ github.ref_name }}
+      firefox-asset: bruvtab-firefox-{version}.xpi
+      chromium-asset: bruvtab-chrome-{version}.crx

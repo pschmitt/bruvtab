@@ -1,13 +1,16 @@
-name: Tests
-
+name: test
 on:
-  pull_request:
   push:
-    branches:
-      - main
-
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  tests:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -35,3 +38,11 @@ jobs:
       - name: Test with pytest
         run: |
           pytest bruvtab -s -vvv --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html --ignore bruvtab/albert --ignore bruvtab/tests/integration
+  pin:
+    uses: pschmitt/ci-workflows/.github/workflows/verify-pin.yaml@main
+    with:
+      firefox-asset: bruvtab-firefox-{version}.xpi
+      chromium-asset: bruvtab-chrome-{version}.crx
+      # The shipped packages differ from the source on purpose (the self-signed
+      # XPI's version, the CRX's update URL): check the hashes only.
+      check-payload: false
