@@ -33,3 +33,15 @@ BruvTab is a CLI tool for managing browser tabs (Firefox, Chrome/Chromium). It c
 - `pyproject.toml`: Project metadata and entry points.
 - `bruvtab/mediator/bruvtab_mediator.py`: Core logic for browser communication.
 - `bruvtab/tests/test_integration.py`: End-to-end validation logic.
+
+## Releases
+
+Before every release, try to land the open dependency PRs (Renovate,
+Dependabot): `gh pr list`, merge those whose checks are green (Renovate
+rebases the ones that conflict; wait for it), and let CI finish on the
+resulting `main` before tagging. Leave out PRs with failing checks or major
+bumps that need real work, and say which.
+
+Tag the release (`git tag -s X.Y.Z`); the release workflow signs and publishes
+the browser extensions, then `pin-release-assets` commits their hashes to
+`browser/packages/metadata.json` on `main`.
