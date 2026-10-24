@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [2.0.16] - 2026-10-24
+
+* Add the logo to the README
+* Pin the signed browser packages by hash in `browser/packages/metadata.json`, which the Nix flake reads, and tag releases as `vX.Y.Z`
+
 ## [2.0.15] - 2026-10-17
 
 * Add `bruvtab close --playing` and `bruvtab close --muted` to close all audible or muted tabs
