@@ -7,12 +7,15 @@
 
   outputs = { self, nixpkgs }:
     let
-      version = "2.0.15";
+      # The signed packages are release assets, pinned by hash in
+      # browser/packages/metadata.json (the pin-release-assets workflow updates it).
+      pins = builtins.fromJSON (builtins.readFile ./browser/packages/metadata.json);
+      inherit (pins) version;
       chromeCrxVersion = version;
-      chromeCrxHash = "sha256-Tp6LYKynK8jL/MR9O/xTXsob+i+BHc4qWTcNW7J/ylo=";
+      chromeCrxHash = pins.chromiumSha256;
       firefoxXpiVersion = version;
-      firefoxXpiHash = "sha256-1Tg+mBDmtLRSt/oMFwdzxyT9S+sifujDcjRrYtaIoRE=";
-      chromeExtensionId = "edpgjheobdplebiikjgjgpmonakingef";
+      firefoxXpiHash = pins.firefoxSha256;
+      chromeExtensionId = pins.chromiumId;
       chromeWebStoreExtensionId = "bkifkhiemhgpnomgdcbcbkifekkecnhk";
       firefoxAddonId = "bruvtab_mediator@example.org";
       firefoxAppId = "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}";
@@ -47,11 +50,11 @@
           py = pkgs.python3Packages;
           chromeCrxAsset = pkgs.fetchurl {
             url = "https://github.com/pschmitt/bruvtab/releases/download/${chromeCrxVersion}/bruvtab-chrome-${chromeCrxVersion}.crx";
-            hash = chromeCrxHash;
+            sha256 = chromeCrxHash;
           };
           firefoxXpiAsset = pkgs.fetchurl {
             url = "https://github.com/pschmitt/bruvtab/releases/download/${firefoxXpiVersion}/bruvtab-firefox-${firefoxXpiVersion}.xpi";
-            hash = firefoxXpiHash;
+            sha256 = firefoxXpiHash;
           };
           chromeCrx = pkgs.runCommand "bruvtab-chrome-crx-${chromeCrxVersion}" { } ''
               mkdir -p $out
