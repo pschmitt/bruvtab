@@ -1,4 +1,6 @@
 <p align="center">
+
+[![nixbot](https://nixbot.brkn.lol/repos/github/pschmitt/bruvtab/badge.svg?branch=main)](https://nixbot.brkn.lol/repos/github/pschmitt/bruvtab)
   <img src="https://raw.githubusercontent.com/pschmitt/bruvtab/main/assets/icons/bruvtab-icon-1024x1024.png" alt="BruvTab logo" width="160">
 </p>
 

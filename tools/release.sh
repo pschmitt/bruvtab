@@ -22,7 +22,8 @@ Usage: $(basename "$0") prepare VERSION | tag
 
   prepare VERSION  Bump to VERSION (X.Y.Z), date the changelog, commit and push.
   tag              Push the GPG-signed vVERSION tag once CI (build, lint, test and
-                   docker, where the repository has them) is green for HEAD.
+                   docker, where the repository has them) and nixbot are green
+                   for HEAD. Nixbot is required when nixbot.toml is present.
                    The release workflow then signs and publishes.
 EOF
 }
@@ -91,6 +92,49 @@ wait_for_workflow() {
   fi
 }
 
+# Require both nixbot phase summaries, including when no check exists yet.
+wait_for_nixbot() {
+  local commit="$1" checks name status conclusion pending seen_eval seen_build
+  while true
+  do
+    if ! checks="$(gh api --paginate "repos/{owner}/{repo}/commits/$commit/check-runs?per_page=100" \
+      --jq '.check_runs[] | select(.name == "nixbot/nix-eval" or .name == "nixbot/nix-build") | [.name, .status, (.conclusion // "")] | @tsv')"
+    then
+      die "Could not read nixbot checks for ${commit:0:7}"
+      return 1
+    fi
+    pending=0
+    seen_eval=
+    seen_build=
+    while IFS=$'\t' read -r name status conclusion
+    do
+      [[ -n "$name" ]] || continue
+      case "$name" in
+        nixbot/nix-eval)
+          seen_eval=1
+          ;;
+        nixbot/nix-build)
+          seen_build=1
+          ;;
+      esac
+      if [[ "$status" != completed ]]
+      then
+        pending=1
+      elif [[ "$conclusion" != success ]]
+      then
+        die "$name did not succeed for ${commit:0:7}: ${conclusion:-missing conclusion}"
+        return 1
+      fi
+    done <<< "$checks"
+    if [[ -n "$seen_eval" && -n "$seen_build" && "$pending" == 0 ]]
+    then
+      return 0
+    fi
+    printf 'Waiting for nixbot evaluation and build on %s…\n' "${commit:0:7}" >&2
+    sleep 30
+  done
+}
+
 prepare() {
   local version="$1" root today file
   local -a files=()
@@ -134,6 +178,10 @@ tag() {
       wait_for_workflow "$commit" "$workflow" || return 1
     fi
   done
+  if [[ -f "$root/nixbot.toml" ]]
+  then
+    wait_for_nixbot "$commit" || return 1
+  fi
   git -C "$root" tag -s "v$version" -m "Release $version" "$commit" || return 1
   git -C "$root" push origin "v$version"
 }

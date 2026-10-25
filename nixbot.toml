@@ -1,0 +1,2 @@
+# Linux package builds and flake checks run on nixbot.
+attribute = "hydraJobs"

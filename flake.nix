@@ -5,7 +5,8 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       # The signed packages are release assets, pinned by hash in
       # browser/packages/metadata.json (the pin-release-assets workflow updates it).
@@ -19,11 +20,11 @@
       chromeWebStoreExtensionId = "bkifkhiemhgpnomgdcbcbkifekkecnhk";
       firefoxAddonId = "bruvtab_mediator@example.org";
       firefoxAppId = "{ec8030f7-c20a-464f-9b0e-13a3a9e97384}";
-      lib = nixpkgs.lib;
+      inherit (nixpkgs) lib;
       projectSource = lib.cleanSourceWith {
         src = self;
         filter =
-          path: type:
+          path: _type:
           let
             base = baseNameOf path;
           in
@@ -41,10 +42,17 @@
         "x86_64-linux"
         "aarch64-linux"
       ];
-      forAllSystems = f: lib.genAttrs systems (system: f system);
+      forAllSystems = lib.genAttrs systems;
     in
     {
-      packages = forAllSystems (system:
+      # Linux package builds and checks run on the self-hosted nixbot.
+      hydraJobs = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
+        packages = self.packages.${system} or { };
+        checks = self.checks.${system} or { };
+      });
+
+      packages = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           py = pkgs.python3Packages;
@@ -57,10 +65,10 @@
             sha256 = firefoxXpiHash;
           };
           chromeCrx = pkgs.runCommand "bruvtab-chrome-crx-${chromeCrxVersion}" { } ''
-              mkdir -p $out
-              cp ${chromeCrxAsset} $out/bruvtab.crx
-              printf '%s' '${chromeExtensionId}' > $out/extension-id
-            '';
+            mkdir -p $out
+            cp ${chromeCrxAsset} $out/bruvtab.crx
+            printf '%s' '${chromeExtensionId}' > $out/extension-id
+          '';
           bruvtab = py.buildPythonApplication {
             pname = "bruvtab";
             inherit version;
@@ -157,13 +165,14 @@
         in
         {
           default = bruvtab;
-          bruvtab = bruvtab;
-          chromeCrx = chromeCrx;
+          inherit bruvtab chromeCrx;
           firefoxAddon = firefoxXpi;
-          firefoxXpi = firefoxXpi;
-        });
+          inherit firefoxXpi;
+        }
+      );
 
-      apps = forAllSystems (system:
+      apps = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           pkg = self.packages.${system}.default;
@@ -179,20 +188,24 @@
           };
           sign-firefox-addon = {
             type = "app";
-            program = "${pkgs.writeShellApplication {
-              name = "sign-firefox-addon";
-              runtimeInputs = [
-                pkgs.git
-                pkgs.web-ext
-              ];
-              text = ''
-                exec "${self}/scripts/sign-firefox-addon.sh" "$@"
-              '';
-            }}/bin/sign-firefox-addon";
+            program = "${
+              pkgs.writeShellApplication {
+                name = "sign-firefox-addon";
+                runtimeInputs = [
+                  pkgs.git
+                  pkgs.web-ext
+                ];
+                text = ''
+                  exec "${self}/scripts/sign-firefox-addon.sh" "$@"
+                '';
+              }
+            }/bin/sign-firefox-addon";
           };
-        });
+        }
+      );
 
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs { inherit system; };
           py = pkgs.python3.withPackages (ps: [
@@ -223,6 +236,7 @@
               py
             ];
           };
-        });
+        }
+      );
     };
 }
