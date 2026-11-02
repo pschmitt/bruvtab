@@ -66,7 +66,7 @@ jobs:
         run: python -m build
 
       - name: Upload Python distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-distributions-${{ env.VERSION }}
           path: |
@@ -138,7 +138,7 @@ jobs:
           test -f "dist/browser/bruvtab-firefox-source-${VERSION}.zip"
 
       - name: Upload Chrome browser artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-artifacts-chrome-${{ env.VERSION }}
           path: |
@@ -191,7 +191,7 @@ jobs:
           fi
 
       - name: Upload AMO Firefox artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-artifacts-firefox-amo-${{ env.VERSION }}
           path: dist/browser/bruvtab-firefox-amo-${{ env.VERSION }}.xpi
@@ -245,7 +245,7 @@ jobs:
         run: test -f "dist/browser/bruvtab-firefox-${VERSION}.xpi"
 
       - name: Upload self-signed Firefox artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-artifacts-firefox-self-signed-${{ env.VERSION }}
           path: dist/browser/bruvtab-firefox-${{ env.VERSION }}.xpi
@@ -263,7 +263,7 @@ jobs:
           echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
 
       - name: Download Chrome browser artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: browser-artifacts-chrome-${{ env.VERSION }}
           path: dist/browser
@@ -316,13 +316,13 @@ jobs:
           echo "SELF_FIREFOX_VERSION=${TAG#v}.1" >> "$GITHUB_ENV"
 
       - name: Download Python distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-distributions-${{ env.VERSION }}
           path: dist
 
       - name: Download browser artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: browser-artifacts-*-${{ env.VERSION }}
           path: dist/browser
