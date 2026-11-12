@@ -620,108 +620,68 @@ function moveTabs(move_triplets) {
 
 function closeTabs(tab_ids) {
   let replied = false;
-  const reply = () => {
-    if (replied) {
-      return;
-    }
+  let verificationStarted = false;
+  const reply = unconfirmed => {
+    if (replied) return;
     replied = true;
-    port.postMessage('OK');
+    port.postMessage(JSON.stringify({unconfirmed}));
   };
 
-  const fallbackTimer = setTimeout(() => {
-    console.warn(`closeTabs timed out for ${JSON.stringify(tab_ids)}`);
-    reply();
-  }, 2000);
-
-  const finish = () => {
-    clearTimeout(fallbackTimer);
-    reply();
+  // A beforeunload dialog can leave a removal callback pending indefinitely.
+  const deadline = setTimeout(() => reply(tab_ids), 3000);
+  const verify = () => {
+    if (verificationStarted || replied) return;
+    verificationStarted = true;
+    try {
+      browserTabs.list({}, tabs => {
+        clearTimeout(deadline);
+        const remaining = new Set(tabs.map(tab => tab.id));
+        reply(tab_ids.filter(id => remaining.has(id)));
+      });
+    } catch (error) {
+      console.error(`Could not verify tab closure: ${error}`);
+      clearTimeout(deadline);
+      reply(tab_ids);
+    }
   };
+  setTimeout(verify, 2000);
 
   try {
     browserTabs.list({}, tabs => {
-      try {
-        const requestedTabIds = new Set(tab_ids);
-        const tabsByWindowId = new Map();
-        const closeWindowIds = [];
-        const closeTabIds = [];
-
-        for (let tab of tabs) {
-          if (!tabsByWindowId.has(tab.windowId)) {
-            tabsByWindowId.set(tab.windowId, []);
-          }
-          tabsByWindowId.get(tab.windowId).push(tab);
-        }
-
-        for (let [_windowId, windowTabs] of tabsByWindowId.entries()) {
-          const matchingTabs = windowTabs.filter(tab => requestedTabIds.has(tab.id));
-          if (matchingTabs.length === 0) {
-            continue;
-          }
-
-          if (matchingTabs.length === windowTabs.length) {
-            closeWindowIds.push(windowTabs[0].windowId);
-          } else {
-            closeTabIds.push(...matchingTabs.map(tab => tab.id));
-          }
-        }
-
-        const operations = [];
-        if (closeTabIds.length > 0) {
-          operations.push(new Promise(resolve => {
-            browserTabs.close(
-              closeTabIds,
-              () => {
-                const lastError = chrome.runtime.lastError;
-                if (lastError) {
-                  console.error(`Error removing tabs ${JSON.stringify(closeTabIds)}: ${lastError.message}`);
-                }
-                resolve();
-              },
-              error => {
-                console.error(`Error removing tabs ${JSON.stringify(closeTabIds)}: ${error}`);
-                resolve();
-              }
-            );
-          }));
-        }
-
-        for (let windowId of closeWindowIds) {
-          operations.push(new Promise(resolve => {
-            browserTabs.closeWindow(
-              windowId,
-              () => resolve(),
-              error => {
-                console.error(`Error removing window ${windowId}: ${error}`);
-                resolve();
-              }
-            );
-          }));
-        }
-
-        Promise.all(operations).then(finish);
-      } catch (error) {
-        console.error(`closeTabs failed while processing tabs ${JSON.stringify(tab_ids)}: ${error}`);
-        browserTabs.close(
-          tab_ids,
-          finish,
-          fallbackError => {
-            console.error(`Fallback tab close failed for ${JSON.stringify(tab_ids)}: ${fallbackError}`);
-            finish();
-          }
-        );
+      if (replied) return;
+      const requested = new Set(tab_ids);
+      const byWindow = new Map();
+      for (const tab of tabs) {
+        if (!byWindow.has(tab.windowId)) byWindow.set(tab.windowId, []);
+        byWindow.get(tab.windowId).push(tab);
       }
+      const operations = [];
+      const closeTabIds = [];
+      for (const [windowId, windowTabs] of byWindow) {
+        const matching = windowTabs.filter(tab => requested.has(tab.id));
+        if (!matching.length) continue;
+        if (matching.length === windowTabs.length) {
+          operations.push(new Promise(resolve => {
+            browserTabs.closeWindow(windowId, resolve, resolve);
+          }));
+        } else {
+          closeTabIds.push(...matching.map(tab => tab.id));
+        }
+      }
+      if (closeTabIds.length) {
+        operations.push(new Promise(resolve => {
+          browserTabs.close(closeTabIds, () => {
+            // Reading lastError prevents Chromium from suppressing callback errors.
+            void chrome.runtime.lastError;
+            resolve();
+          }, resolve);
+        }));
+      }
+      Promise.all(operations).then(() => setTimeout(verify, 100));
     });
   } catch (error) {
-    console.error(`closeTabs crashed for ${JSON.stringify(tab_ids)}: ${error}`);
-    browserTabs.close(
-      tab_ids,
-      finish,
-      fallbackError => {
-        console.error(`Fallback tab close failed for ${JSON.stringify(tab_ids)}: ${fallbackError}`);
-        finish();
-      }
-    );
+    console.error(`Could not close tabs: ${error}`);
+    verify();
   }
 }
 

@@ -379,10 +379,25 @@ class MultipleMediatorsAPI(object):
         return [api for api in self._apis if api.ready]
 
     def close_tabs(self, args):
+        unconfirmed = []
         for api in self._apis:
             tabs = [tab for tab in args if api.prefix_match(tab)]
             if tabs:
-                api.close_tabs(tabs)
+                try:
+                    result = api.close_tabs(tabs)
+                    result = json.loads(result)
+                    remaining = result['unconfirmed']
+                    requested = {int(tab.split('.')[-1]) for tab in tabs}
+                    if (not isinstance(remaining, list) or
+                            any(type(tab_id) is not int or tab_id not in requested
+                                for tab_id in remaining)):
+                        raise ValueError('invalid close result')
+                    unconfirmed.extend(tab for tab in tabs
+                                       if int(tab.split('.')[-1]) in remaining)
+                except (ValueError, TypeError, KeyError, URLError, HTTPError,
+                        socket.timeout, RemoteDisconnected, ConnectionResetError):
+                    unconfirmed.extend(tabs)
+        return unconfirmed
 
     def activate_tab(self, args: List[str], focused: bool):
         if len(args) == 0:

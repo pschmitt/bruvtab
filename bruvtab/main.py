@@ -595,7 +595,11 @@ def close_tabs(args):
             tab_ids = split_tab_ids(read_stdin().strip())
 
     bruvtab_logger.info('Closing tabs: %s', tab_ids)
-    api.close_tabs(tab_ids)
+    unconfirmed = api.close_tabs(tab_ids)
+    if unconfirmed:
+        print_error('Warning: could not confirm that these tabs closed: %s. '
+                    'Check for a browser confirmation dialog.' % ', '.join(unconfirmed))
+        return 1
 
 
 def activate_tab(args):

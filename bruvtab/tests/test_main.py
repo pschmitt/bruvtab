@@ -423,6 +423,27 @@ class RecordingHttpClient:
 
 
 class TestCloseTabsPerClient(TestCase):
+    def test_close_reports_only_unconfirmed_tabs(self):
+        client = RecordingHttpClient()
+        api = SingleMediatorAPI('a', client=client)
+        with patch.object(api, 'close_tabs', return_value='{"unconfirmed":[3]}'):
+            result = MultipleMediatorsAPI([api]).close_tabs(['a.1.2', 'a.1.3'])
+        assert result == ['a.1.3']
+
+    def test_close_treats_legacy_success_as_unconfirmed(self):
+        client = RecordingHttpClient()
+        api = SingleMediatorAPI('a', client=client)
+        with patch.object(api, 'close_tabs', return_value='OK'):
+            result = MultipleMediatorsAPI([api]).close_tabs(['a.1.2'])
+        assert result == ['a.1.2']
+
+    def test_close_reports_confirmed_success(self):
+        client = RecordingHttpClient()
+        api = SingleMediatorAPI('a', client=client)
+        with patch.object(api, 'close_tabs', return_value='{"unconfirmed":[]}'):
+            result = MultipleMediatorsAPI([api]).close_tabs(['a.1.2'])
+        assert result == []
+
     def test_close_sends_each_tab_only_to_its_client(self):
         clients = {prefix: RecordingHttpClient() for prefix in 'ab'}
         api = MultipleMediatorsAPI([SingleMediatorAPI(prefix, client=client)
