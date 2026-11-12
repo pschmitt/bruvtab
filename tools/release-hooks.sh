@@ -10,10 +10,9 @@ bump_version() {
   root="$(repo_root)"
   sed -i "s/^__version__ = .*$/__version__ = '$version'/" "$root/bruvtab/__version__.py"
   sed -i "s/^\(  \"version\": \)\".*\"/\1\"$version\"/" \
-    "$root/bruvtab/extension/chrome/manifest.json" "$root/bruvtab/extension/firefox/manifest.json" \
-    "$root/bruvtab/extension/chrome-force-close/manifest.json"
+    "$root/bruvtab/extension/chrome/manifest.json" "$root/bruvtab/extension/firefox/manifest.json"
 }
 
 release_files() {
-  printf '%s\n' bruvtab/__version__.py bruvtab/extension/chrome/manifest.json bruvtab/extension/firefox/manifest.json bruvtab/extension/chrome-force-close/manifest.json
+  printf '%s\n' bruvtab/__version__.py bruvtab/extension/chrome/manifest.json bruvtab/extension/firefox/manifest.json
 }

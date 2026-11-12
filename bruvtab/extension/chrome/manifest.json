@@ -17,11 +17,10 @@
     "activeTab",
     "scripting",
     "alarms",
-    "storage"
+    "debugger"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
-  "options_page": "options.html",
   "short_name": "BruvTab"
 }

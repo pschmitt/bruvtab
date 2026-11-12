@@ -21,16 +21,23 @@ function setup({permission = true, attachFails = false} = {}) {
   };
   const context = {chrome, console, setTimeout: (fn, ms) => { timers.push([fn, ms]); }};
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync('bruvtab/extension/chrome-force-close/force-close.js', 'utf8'), context);
+  vm.runInContext(fs.readFileSync('bruvtab/extension/chrome/force-close.js', 'utf8'), context);
   return {context, timers, commands, detached, event: (...args) => event(...args),
     close: () => { closes++; }, get closes() { return closes; }};
 }
 
-test('optional permission denied: normal close', async () => {
+test('permission unavailable: normal close', async () => {
   const s = setup({permission: false});
   await s.context.closeWithOptionalDebugger([1], s.close);
   assert.equal(s.closes, 1);
   assert.equal(s.commands.length, 0);
+});
+
+test('debugger API unavailable: normal close', async () => {
+  const s = setup();
+  delete s.context.chrome.debugger;
+  await s.context.closeWithOptionalDebugger([1], s.close);
+  assert.equal(s.closes, 1);
 });
 
 test('attach failure: normal close', async () => {
@@ -77,20 +84,3 @@ test('a late debugger attachment is detached after fallback', async () => {
   await Promise.resolve();
   assert.deepEqual(s.detached, [1]);
 });
-
-for (const mode of ['absent', 'unavailable', 'ready']) {
-  test(`main extension falls back or continues when companion is ${mode}`, async () => {
-    let closes = 0;
-    let calls = 0;
-    const chrome = {
-      storage: {local: {get: async () => ({forceCloseCompanion: mode === 'absent' ? '' : 'companion'})}},
-      runtime: {sendMessage: async () => { calls++; if (mode === 'unavailable') throw Error('missing'); return {ready: true}; }},
-    };
-    const context = {chrome, console, setTimeout: () => {}};
-    vm.createContext(context);
-    vm.runInContext(fs.readFileSync('bruvtab/extension/chrome/force-close.js', 'utf8'), context);
-    await context.closeWithOptionalDebugger([1], () => { closes++; });
-    assert.equal(closes, 1);
-    assert.equal(calls, mode === 'absent' ? 0 : 1);
-  });
-}
