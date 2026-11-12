@@ -493,7 +493,7 @@ class TestDebuggerCLI(WithMediator):
             result = self._run_commands(['screenshot', 'a.1.2', '--full-page', '--raw'])
         self._assert_init()
         assert result == 0
-        assert output == [b'png']
+        assert b''.join(output) == b'png'
         assert self.mediator.transport.sent == [
             {'name': 'debug_command', 'tabId': 2, 'action': 'screenshot', 'options': {}}]
 
@@ -504,7 +504,7 @@ class TestDebuggerCLI(WithMediator):
             result = self._run_commands(['pdf', 'a.1.2'])
         self._assert_init()
         assert result == 0
-        assert output == [b'pdf']
+        assert b''.join(output) == b'pdf'
         assert self.mediator.transport.sent[-1]['action'] == 'pdf'
 
     def test_console_poll_and_cleanup(self):
