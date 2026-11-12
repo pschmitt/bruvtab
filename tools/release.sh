@@ -24,6 +24,8 @@ Usage: $(basename "$0") prepare VERSION | tag
   tag              Push the GPG-signed vVERSION tag once CI (build, lint, test and
                    docker, where the repository has them) and nixbot are green
                    for HEAD. Nixbot is required when nixbot.toml is present.
+                   Cancelled jobs matching \$RELEASE_OPTIONAL_JOBS (an extended
+                   regex, default "macos") do not count as failures.
                    The release workflow then signs and publishes.
 EOF
 }
@@ -69,27 +71,68 @@ load_hooks() {
   fi
 }
 
-# Wait until every run of WORKFLOW for COMMIT has finished; succeed only if all passed.
+# Jobs whose cancellation does not block a release (an extended regex over job
+# names). macOS runners are scarce: their jobs get cancelled before a runner
+# picks them up, which says nothing about the code. Failures still block.
+RELEASE_OPTIONAL_JOBS="${RELEASE_OPTIONAL_JOBS:-macos}"
+
+# Whether a finished, non-successful run only "failed" because optional jobs
+# (RELEASE_OPTIONAL_JOBS) were cancelled while every other job succeeded or was
+# skipped. Prints the tolerated jobs.
+run_only_lost_optional_jobs() {
+  local run_id="$1" jobs
+  jobs="$(gh run view "$run_id" --json jobs \
+    -q '.jobs[] | [.name, (.conclusion // "")] | @tsv' 2>/dev/null)" || return 1
+  [[ -n "$jobs" ]] || return 1
+  local name conclusion tolerated=()
+  while IFS=$'\t' read -r name conclusion
+  do
+    case "$conclusion" in
+      success|skipped|neutral) ;;
+      cancelled)
+        if [[ "$name" =~ $RELEASE_OPTIONAL_JOBS ]]
+        then
+          tolerated+=("$name")
+        else
+          return 1
+        fi
+        ;;
+      *) return 1 ;;
+    esac
+  done <<< "$jobs"
+  printf '%s\n' "${tolerated[@]}"
+}
+
+# Wait until every run of WORKFLOW for COMMIT has finished; succeed only if all
+# passed, or lost nothing but cancelled optional jobs.
 wait_for_workflow() {
-  local commit="$1" workflow="$2" pending conclusions
+  local commit="$1" workflow="$2" pending runs
   while true
   do
     pending="$(gh run list --commit "$commit" --workflow "$workflow" --json status \
       -q '[.[] | select(.status != "completed")] | length' 2>/dev/null)"
-    conclusions="$(gh run list --commit "$commit" --workflow "$workflow" --json conclusion \
-      -q '.[].conclusion' 2>/dev/null)"
-    if [[ "$pending" == 0 && -n "$conclusions" ]]
+    runs="$(gh run list --commit "$commit" --workflow "$workflow" --json databaseId,conclusion \
+      -q '.[] | [.databaseId, .conclusion] | @tsv' 2>/dev/null)"
+    if [[ "$pending" == 0 && -n "$runs" ]]
     then
       break
     fi
     printf 'Waiting for %s on %s…\n' "$workflow" "${commit:0:7}" >&2
     sleep 30
   done
-  if grep -qvx success <<< "$conclusions"
-  then
-    die "Workflow $workflow did not succeed for ${commit:0:7}: $(tr '\n' ' ' <<< "$conclusions")"
+  local run_id conclusion tolerated
+  while IFS=$'\t' read -r run_id conclusion
+  do
+    [[ "$conclusion" == success ]] && continue
+    if tolerated="$(run_only_lost_optional_jobs "$run_id")" && [[ -n "$tolerated" ]]
+    then
+      printf 'Workflow %s for %s: ignoring cancelled optional job(s): %s\n' \
+        "$workflow" "${commit:0:7}" "$(paste -sd, <<< "$tolerated")" >&2
+      continue
+    fi
+    die "Workflow $workflow did not succeed for ${commit:0:7}: run $run_id $conclusion"
     return 1
-  fi
+  done <<< "$runs"
 }
 
 # Require both nixbot phase summaries, including when no check exists yet.
