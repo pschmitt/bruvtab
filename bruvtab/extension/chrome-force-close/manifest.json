@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "BruvTab force close companion",
+  "version": "2.0.17",
+  "description": "Allows BruvTab to close tabs that request confirmation.",
+  "permissions": ["debugger"],
+  "background": {"service_worker": "background.js"},
+  "externally_connectable": {
+    "ids": ["edpgjheobdplebiikjgjgpmonakingef", "bkifkhiemhgpnomgdcbcbkifekkecnhk"]
+  },
+  "options_page": "options.html"
+}

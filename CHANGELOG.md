@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-* Add an optional Chromium debugger permission to close tabs with leave-site confirmations
+* Add an optional Chromium companion to close tabs with leave-site confirmations
 
 ## [2.0.17] - 2026-11-12
 

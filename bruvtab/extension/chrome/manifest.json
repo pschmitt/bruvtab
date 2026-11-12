@@ -16,12 +16,12 @@
     "windows",
     "activeTab",
     "scripting",
-    "alarms"
+    "alarms",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
-  "optional_permissions": ["debugger"],
   "options_page": "options.html",
   "short_name": "BruvTab"
 }

@@ -4,9 +4,9 @@
 <body>
   <h1>BruvTab settings</h1>
   <h2>Close tabs with confirmation dialogs</h2>
-  <p>Allow BruvTab to use the browser debugger to accept leave-site confirmations when closing tabs. Unsaved changes may be lost. The debugger permission grants access to page data.</p>
-  <button id="enable">Enable</button>
-  <button id="disable">Disable</button>
+  <p>Install the optional BruvTab force-close companion and enter its extension ID below. The companion uses debugger access to accept leave-site confirmations. Unsaved changes may be lost.</p>
+  <label>Companion extension ID <input id="companion" placeholder="Leave blank to disable"></label>
+  <button id="save">Save</button>
   <p id="status" role="status"></p>
   <script src="options.js"></script>
 </body>

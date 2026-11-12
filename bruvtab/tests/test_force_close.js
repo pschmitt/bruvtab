@@ -21,7 +21,7 @@ function setup({permission = true, attachFails = false} = {}) {
   };
   const context = {chrome, console, setTimeout: (fn, ms) => { timers.push([fn, ms]); }};
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync('bruvtab/extension/chrome/force-close.js', 'utf8'), context);
+  vm.runInContext(fs.readFileSync('bruvtab/extension/chrome-force-close/force-close.js', 'utf8'), context);
   return {context, timers, commands, detached, event: (...args) => event(...args),
     close: () => { closes++; }, get closes() { return closes; }};
 }
@@ -77,3 +77,20 @@ test('a late debugger attachment is detached after fallback', async () => {
   await Promise.resolve();
   assert.deepEqual(s.detached, [1]);
 });
+
+for (const mode of ['absent', 'unavailable', 'ready']) {
+  test(`main extension falls back or continues when companion is ${mode}`, async () => {
+    let closes = 0;
+    let calls = 0;
+    const chrome = {
+      storage: {local: {get: async () => ({forceCloseCompanion: mode === 'absent' ? '' : 'companion'})}},
+      runtime: {sendMessage: async () => { calls++; if (mode === 'unavailable') throw Error('missing'); return {ready: true}; }},
+    };
+    const context = {chrome, console, setTimeout: () => {}};
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync('bruvtab/extension/chrome/force-close.js', 'utf8'), context);
+    await context.closeWithOptionalDebugger([1], () => { closes++; });
+    assert.equal(closes, 1);
+    assert.equal(calls, mode === 'absent' ? 0 : 1);
+  });
+}

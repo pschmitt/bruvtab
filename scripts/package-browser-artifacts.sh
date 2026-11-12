@@ -102,6 +102,10 @@ PY
     "${repo_root}/bruvtab/extension/chrome"
 
   package_zip \
+    "${output_dir}/bruvtab-force-close-companion-${version}.zip" \
+    "${repo_root}/bruvtab/extension/chrome-force-close"
+
+  package_zip \
     "${output_dir}/bruvtab-firefox-source-${version}.zip" \
     "${repo_root}/bruvtab/extension/firefox"
 }

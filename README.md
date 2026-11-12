@@ -23,7 +23,7 @@ BruvTab is a fork of [brotab](https://github.com/balta2ar/brotab), originally cr
 * **JSON support**: Global `--json` flag with pretty output and terminal colors.
 * **Search & Index**: Index tab contents and search them using SQLite FTS5.
 * **Rich Output**: Colorized help and tables using the `rich` library.
-* **Close confirmations**: In Chromium, enable the optional debugger permission in BruvTab's extension options to close tabs that ask for confirmation. Unsaved changes may be lost.
+* **Close confirmations**: Chromium users can install the optional [force-close companion](bruvtab/extension/chrome-force-close/) to close tabs that ask for confirmation. Unsaved changes may be lost.
 
 ## Usage
 

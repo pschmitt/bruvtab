@@ -134,6 +134,7 @@ jobs:
           test -f "dist/browser/bruvtab-chrome-${VERSION}.crx"
           test -f "dist/browser/bruvtab-chrome.crx"
           test -f "dist/browser/bruvtab-chrome-${VERSION}.zip"
+          test -f "dist/browser/bruvtab-force-close-companion-${VERSION}.zip"
           test -f "dist/browser/bruvtab-chrome-updates.xml"
           test -f "dist/browser/bruvtab-firefox-source-${VERSION}.zip"
 
@@ -146,6 +147,7 @@ jobs:
             dist/browser/bruvtab-chrome.crx
             dist/browser/bruvtab-chrome-${{ env.VERSION }}.crx
             dist/browser/bruvtab-chrome-${{ env.VERSION }}.zip
+            dist/browser/bruvtab-force-close-companion-${{ env.VERSION }}.zip
             dist/browser/bruvtab-firefox-source-${{ env.VERSION }}.zip
           if-no-files-found: error
 
@@ -337,6 +339,7 @@ jobs:
           test -f "dist/browser/bruvtab-chrome.crx"
           test -f "dist/browser/bruvtab-chrome-${VERSION}.crx"
           test -f "dist/browser/bruvtab-chrome-${VERSION}.zip"
+          test -f "dist/browser/bruvtab-force-close-companion-${VERSION}.zip"
           test -f "dist/browser/bruvtab-firefox-${VERSION}.xpi"
           test -f "dist/browser/bruvtab-firefox-source-${VERSION}.zip"
 

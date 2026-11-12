@@ -1,27 +1,19 @@
-const debuggerPermission = {permissions: ['debugger']};
+const input = document.getElementById('companion');
 const status = document.getElementById('status');
+chrome.storage.local.get('forceCloseCompanion').then(({forceCloseCompanion}) => {
+  input.value = forceCloseCompanion || '';
+}).catch(error => { status.textContent = `Could not load settings: ${error.message}`; });
 
-async function refresh() {
-  const enabled = await chrome.permissions.contains(debuggerPermission);
-  status.textContent = enabled ? 'Enabled' : 'Disabled';
-  document.getElementById('enable').disabled = enabled;
-  document.getElementById('disable').disabled = !enabled;
-}
-
-document.getElementById('enable').addEventListener('click', async () => {
+document.getElementById('save').addEventListener('click', async () => {
+  const id = input.value.trim();
+  if (id && !/^[a-p]{32}$/.test(id)) {
+    status.textContent = 'Enter a valid extension ID.';
+    return;
+  }
   try {
-    await chrome.permissions.request(debuggerPermission);
-    await refresh();
+    await chrome.storage.local.set({forceCloseCompanion: id});
+    status.textContent = 'Saved.';
   } catch (error) {
-    status.textContent = `Could not enable: ${error.message}`;
+    status.textContent = `Could not save: ${error.message}`;
   }
 });
-document.getElementById('disable').addEventListener('click', async () => {
-  try {
-    await chrome.permissions.remove(debuggerPermission);
-    await refresh();
-  } catch (error) {
-    status.textContent = `Could not disable: ${error.message}`;
-  }
-});
-refresh().catch(error => { status.textContent = `Could not read permission: ${error.message}`; });
