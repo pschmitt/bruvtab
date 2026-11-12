@@ -81,6 +81,11 @@ class BrowserRemoteAPI:
         self._transport.send(command)
         return self._transport.recv()
 
+    def debug_command(self, tab_id, action, options):
+        self._transport.send({'name': 'debug_command', 'tabId': tab_id,
+                              'action': action, 'options': options})
+        return self._transport.recv()
+
     def close_tabs(self, tab_ids: str):
         """
         :param tab_ids: Comma-separated list of tab IDs to close.

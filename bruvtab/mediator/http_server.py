@@ -64,6 +64,7 @@ class MediatorHttpServer:
         self.app.route('/open_urls/<int:window_id>', methods=['POST'])(self.open_urls)
         self.app.route('/update_tabs', methods=['POST'])(self.update_tabs)
         self.app.route('/media_control/<int:window_id>/<int:tab_id>/<action>', methods=['GET'])(self.media_control)
+        self.app.route('/debug_command', methods=['POST'])(self.debug_command)
         self.app.route('/open_urls', methods=['POST'])(self.open_urls)
         self.app.route('/close_tabs/<tab_ids>', methods=['GET'])(self.close_tabs)
         self.app.route('/new_tab/<query>', methods=['GET'])(self.new_tab)
@@ -129,6 +130,15 @@ class MediatorHttpServer:
         result = self.remote_api.update_tabs(updates)
         mediator_logger.info('Update tabs result: %s', str(result))
         return '\n'.join(result)
+
+    def debug_command(self):
+        payload = request.files.get('command')
+        if payload is None:
+            return dumps({'error': 'Missing command'}), 400
+        command = loads(payload.stream.read().decode('utf8'))
+        result = self.remote_api.debug_command(command['tabId'], command['action'],
+                                               command.get('options', {}))
+        return dumps(result)
 
     def media_control(self, window_id, tab_id, action):
         result = self.remote_api.media_control(window_id, tab_id, action)

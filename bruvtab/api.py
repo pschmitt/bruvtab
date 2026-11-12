@@ -162,6 +162,19 @@ class SingleMediatorAPI(object):
     def get_active_tabs(self, args) -> List[str]:
         return [self.prefix_tab(tab) for tab in self._get('/get_active_tabs').split(',')]
 
+    def debug_command(self, tab_id, action, options=None):
+        prefix, _window_id, local_tab_id = split_prefixed_tab_id(tab_id)
+        if prefix != self._prefix:
+            raise ValueError('Tab is not available on this client')
+        command = {'tabId': int(local_tab_id), 'action': action, 'options': options or {}}
+        result = json.loads(self._post('/debug_command', {'command': json.dumps(command)}))
+        if 'debugResult' not in result:
+            raise RuntimeError(result.get('error', 'Debugger commands are unsupported by this browser'))
+        result = result['debugResult']
+        if result.get('error'):
+            raise RuntimeError(result['error'])
+        return result
+
     def get_screenshot(self, args):
         tab_id = getattr(args, 'tab_id', None)
         wait = getattr(args, 'wait', 0)

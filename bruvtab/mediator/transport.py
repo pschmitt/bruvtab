@@ -61,8 +61,12 @@ class StdTransport(Transport):
             raise TransportError('StdTransport: cannot read, raw_length is empty')
         message_length = struct.unpack('@I', raw_length)[0]
         message = self._in.read(message_length).decode('utf8')
-        mediator_logger.info('StdTransport RECEIVED: %s', message.encode('utf8'))
-        return json.loads(message)
+        decoded = json.loads(message)
+        if isinstance(decoded, dict) and 'debugResult' in decoded:
+            mediator_logger.info('StdTransport RECEIVED: debugger result')
+        else:
+            mediator_logger.info('StdTransport RECEIVED: %s', message.encode('utf8'))
+        return decoded
 
     def _encode(self, message):
         encoded_content = json.dumps(message).encode('utf8')

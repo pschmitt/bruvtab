@@ -37,7 +37,7 @@ jobs:
 
       - name: Test extension close handling
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: node --test bruvtab/tests/test_close_tabs.js bruvtab/tests/test_force_close.js
+        run: node --test bruvtab/tests/test_close_tabs.js bruvtab/tests/test_force_close.js bruvtab/tests/test_debugger_features.js
 
       - name: Test with pytest
         run: |

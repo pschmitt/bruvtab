@@ -469,6 +469,58 @@ class TestCloseTabsPerClient(TestCase):
         assert clients['b'].paths == []
 
 
+class TestDebuggerCommands(TestCase):
+    def test_debugger_request_reaches_browser(self):
+        transport = MockedLoggingTransport()
+        transport.received_extend([{'debugResult': {'data': 'abc'}}])
+        remote = default_remote_api(transport)
+        assert remote.debug_command(123, 'pdf', {}) == {'debugResult': {'data': 'abc'}}
+        assert transport.sent[-1] == {'name': 'debug_command', 'tabId': 123,
+                                      'action': 'pdf', 'options': {}}
+
+    def test_debugger_rejects_unsupported_browser_response(self):
+        api = SingleMediatorAPI('a', client=RecordingHttpClient())
+        with patch.object(api, '_post', return_value='{"error": "unknown command"}'):
+            with self.assertRaisesRegex(RuntimeError, 'unknown command'):
+                api.debug_command('a.1.2', 'pdf')
+
+
+class TestDebuggerCLI(WithMediator):
+    def test_full_page_screenshot_reaches_extension(self):
+        self.mediator.transport.received_extend(['mocked', {'debugResult': {'data': 'cG5n'}}])
+        output = []
+        with patch('bruvtab.main.sys.stdout.buffer.write', output.append):
+            result = self._run_commands(['screenshot', 'a.1.2', '--full-page', '--raw'])
+        self._assert_init()
+        assert result == 0
+        assert output == [b'png']
+        assert self.mediator.transport.sent == [
+            {'name': 'debug_command', 'tabId': 2, 'action': 'screenshot', 'options': {}}]
+
+    def test_pdf_reaches_extension(self):
+        self.mediator.transport.received_extend(['mocked', {'debugResult': {'data': 'cGRm'}}])
+        output = []
+        with patch('bruvtab.main.sys.stdout.buffer.write', output.append):
+            result = self._run_commands(['pdf', 'a.1.2'])
+        self._assert_init()
+        assert result == 0
+        assert output == [b'pdf']
+        assert self.mediator.transport.sent[-1]['action'] == 'pdf'
+
+    def test_console_poll_and_cleanup(self):
+        self.mediator.transport.received_extend([
+            'mocked', {'debugResult': {}},
+            {'debugResult': {'events': [{'type': 'error', 'args': ['oops']}], 'dropped': 0}},
+            {'debugResult': {}},
+        ])
+        with patch('builtins.print') as output:
+            result = self._run_commands(['console', 'a.1.2', '--duration', '0.000000001'])
+        self._assert_init()
+        assert result == 0
+        assert [c['action'] for c in self.mediator.transport.sent] == ['start', 'poll', 'stop']
+        assert 'oops' in output.call_args.args[0]
+
+
 class TestMediaControls(WithMediator):
     def test_pause_targets_explicit_tab(self):
         self.mediator.transport.received_extend([

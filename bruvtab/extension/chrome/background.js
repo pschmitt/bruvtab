@@ -3,6 +3,7 @@ On startup, connect to the "bruvtab_mediator" app.
 */
 
 importScripts('force-close.js');
+importScripts('debugger-features.js');
 
 //const GET_WORDS_SCRIPT = '[...new Set(document.body.innerText.match(/\\w+/g))].sort().join("\\n");';
 const GET_WORDS_SCRIPT = '[...new Set(document.documentElement.innerText.match(#match_regex#))].sort().join(#join_with#);';
@@ -1121,6 +1122,11 @@ function handleNativeMessage(command) {
   else if (command['name'] == 'media_control') {
     console.log('Controlling media:', command['window_id'], command['tab_id'], command['action']);
     mediaControl(command['window_id'], command['tab_id'], command['action']);
+  }
+
+  else if (command['name'] == 'debug_command') {
+    debugCommand(command).then(result => port.postMessage({debugResult: result}),
+      error => port.postMessage({debugResult: {error: String(error)}}));
   }
 
   else if (command['name'] == 'activate_tab') {

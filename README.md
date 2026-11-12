@@ -24,8 +24,15 @@ BruvTab is a fork of [brotab](https://github.com/balta2ar/brotab), originally cr
 * **Search & Index**: Index tab contents and search them using SQLite FTS5.
 * **Rich Output**: Colorized help and tables using the `rich` library.
 * **Close confirmations**: On Chromium, BruvTab can close tabs that ask for confirmation using debugger access. Unsaved changes may be lost.
+* **Chromium debugging**: Capture full-page screenshots and PDFs, or stream a tab's console and network events.
 
 ## Usage
+
+For Chromium tabs, `bruvtab screenshot TAB --full-page --raw > page.png`
+captures the whole page, and `bruvtab pdf TAB -o page.pdf` saves a PDF.
+Use `bruvtab console TAB` or `bruvtab network TAB` to stream events as JSON
+lines until Ctrl-C; `--duration SECONDS` stops automatically. These commands
+require the Chromium extension's debugger permission.
 
 ```txt
 Usage: bruvtab [-h] [--target TARGET_HOSTS] [--json]

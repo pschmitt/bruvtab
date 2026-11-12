@@ -641,6 +641,9 @@ def show_active_tabs(args):
 def screenshot(args):
     bruvtab_logger.info('Getting screenshot: %s', args)
     apis = create_clients_from_args(args)
+    if getattr(args, 'full_page', False) and args.tab is None:
+        print_error('A tab is required for a full-page screenshot')
+        return 1
     if args.tab is not None:
         tab_id = resolve_tab_selector(apis, args.tab)
         if tab_id is None:
@@ -650,9 +653,18 @@ def screenshot(args):
         if not apis:
             print_error('No client available for tab ID %s' % tab_id)
             return 1
+    captured = False
     for api in apis:
         try:
-            result = loads(api.get_screenshot(args))
+            if getattr(args, 'full_page', False):
+                if args.wait > 0:
+                    time.sleep(args.wait)
+                result = api.debug_command(args.tab_id, 'screenshot')
+                result['data'] = 'data:image/png;base64,' + result['data']
+                _prefix, window_id, tab_id = args.tab_id.split('.')
+                result.update({'tab': int(tab_id), 'window': int(window_id)})
+            else:
+                result = loads(api.get_screenshot(args))
         except Exception as e:
             print("Cannot get screenshot from API %s: %s" % (api, e), file=sys.stderr)
             continue
@@ -667,8 +679,75 @@ def screenshot(args):
         result['api'] = api._prefix[:1]
         result = dumps(result)
         print(result)
+        captured = True
     if args.raw:
         return 1
+    if getattr(args, 'full_page', False) and not captured:
+        return 1
+
+
+def debug_pdf(args):
+    api, tab_id = resolve_debugger_target(args)
+    if not api:
+        return 1
+    try:
+        data = b64decode(api.debug_command(tab_id, 'pdf')['data'])
+        if args.output:
+            with open(args.output, 'wb') as output:
+                output.write(data)
+        else:
+            sys.stdout.buffer.write(data)
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        print_error('Could not save PDF: %s' % error)
+        return 1
+    return 0
+
+
+def resolve_debugger_target(args):
+    apis = create_clients_from_args(args)
+    tab_id = resolve_tab_selector(apis, args.tab)
+    if tab_id is None:
+        return None, None
+    matches = filter_apis_by_tab_id(apis, tab_id)
+    if not matches:
+        print_error('No client available for tab ID %s' % tab_id)
+        return None, None
+    return matches[0], tab_id
+
+
+def debug_watch(args):
+    if args.duration < 0:
+        print_error('Duration must be non-negative')
+        return 1
+    api, tab_id = resolve_debugger_target(args)
+    if not api:
+        return 1
+    started = False
+    try:
+        api.debug_command(tab_id, 'start', {'mode': args.debug_mode})
+        started = True
+        deadline = time.monotonic() + args.duration if args.duration else None
+        while True:
+            result = api.debug_command(tab_id, 'poll')
+            if result.get('dropped'):
+                print_warning('Dropped %s debugger events' % result['dropped'])
+            for event in result.get('events', []):
+                print(dumps(event), flush=True)
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            time.sleep(min(0.5, max(0, deadline - time.monotonic())) if deadline else 0.5)
+    except KeyboardInterrupt:
+        pass
+    except (OSError, ValueError, KeyError, RuntimeError) as error:
+        print_error('Debugger session failed: %s' % error)
+        return 1
+    finally:
+        if started:
+            try:
+                api.debug_command(tab_id, 'stop')
+            except (OSError, ValueError, KeyError, RuntimeError) as error:
+                print_warning('Could not stop debugger session: %s' % error)
+    return 0
 
 
 def search_tabs(args):
@@ -1314,6 +1393,21 @@ def build_parser():
                                    help='Output raw image bytes to stdout')
     parser_screenshot.add_argument('--wait', type=float, default=0,
                                    help='Wait time in seconds before taking the screenshot')
+    parser_screenshot.add_argument('--full-page', action='store_true',
+                                   help='Capture the full page (Chromium only; requires a tab)')
+
+    parser_pdf = subparsers.add_parser('pdf', help='Save a Chromium tab as PDF')
+    parser_pdf_tab = parser_pdf.add_argument('tab', help='Tab ID, title, or URL fragment')
+    parser_pdf.add_argument('-o', '--output', help='Output file (defaults to stdout)')
+    parser_pdf.set_defaults(func=debug_pdf)
+
+    parser_debug_tabs = []
+    for command in ('console', 'network'):
+        parser_debug = subparsers.add_parser(command, help='Watch tab %s events (Chromium)' % command)
+        parser_debug_tabs.append(parser_debug.add_argument('tab', help='Tab ID, title, or URL fragment'))
+        parser_debug.add_argument('--duration', type=float, default=0,
+                                  help='Stop after this many seconds (default: until Ctrl-C)')
+        parser_debug.set_defaults(func=debug_watch, debug_mode=command)
 
     parser_search_tabs = subparsers.add_parser(
         'search',
@@ -1519,6 +1613,9 @@ def build_parser():
     parser_mute_tab.completer = complete_playing_tab_ids
     parser_unmute_tab.completer = complete_tab_ids
     parser_screenshot_tab.completer = complete_tab_ids
+    parser_pdf_tab.completer = complete_tab_ids
+    for debug_tab in parser_debug_tabs:
+        debug_tab.completer = complete_tab_ids
     parser_index_tabs_ids.completer = complete_tab_ids
     parser_new_tab_target.completer = complete_client_or_window
     parser_open_urls_args.completer = complete_open_args
