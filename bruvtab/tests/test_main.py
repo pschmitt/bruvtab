@@ -6,6 +6,7 @@ from typing import List
 from unittest import TestCase
 from unittest.mock import patch
 from uuid import uuid4
+from urllib.error import HTTPError
 
 from rich.console import Console
 from rich.json import JSON
@@ -482,6 +483,18 @@ class TestDebuggerCommands(TestCase):
         api = SingleMediatorAPI('a', client=RecordingHttpClient())
         with patch.object(api, '_post', return_value='{"error": "unknown command"}'):
             with self.assertRaisesRegex(RuntimeError, 'unknown command'):
+                api.debug_command('a.1.2', 'pdf')
+
+    def test_debugger_reports_outdated_extension(self):
+        api = SingleMediatorAPI('a', client=RecordingHttpClient())
+        with patch.object(api, '_post', return_value='{"error": "Unknown command: debug_command"}'):
+            with self.assertRaisesRegex(RuntimeError, 'current BruvTab Chromium extension'):
+                api.debug_command('a.1.2', 'pdf')
+
+    def test_debugger_reports_outdated_mediator(self):
+        api = SingleMediatorAPI('a', client=RecordingHttpClient())
+        with patch.object(api, '_post', side_effect=HTTPError('', 404, 'Not Found', {}, None)):
+            with self.assertRaisesRegex(RuntimeError, 'current BruvTab mediator'):
                 api.debug_command('a.1.2', 'pdf')
 
 

@@ -167,8 +167,16 @@ class SingleMediatorAPI(object):
         if prefix != self._prefix:
             raise ValueError('Tab is not available on this client')
         command = {'tabId': int(local_tab_id), 'action': action, 'options': options or {}}
-        result = json.loads(self._post('/debug_command', {'command': json.dumps(command)}))
+        try:
+            response = self._post('/debug_command', {'command': json.dumps(command)})
+        except HTTPError as error:
+            if error.code == 404:
+                raise RuntimeError('Debugger commands require the current BruvTab mediator and Chromium extension') from error
+            raise
+        result = json.loads(response)
         if 'debugResult' not in result:
+            if str(result.get('error', '')).startswith('Unknown command:'):
+                raise RuntimeError('Debugger commands require the current BruvTab Chromium extension')
             raise RuntimeError(result.get('error', 'Debugger commands are unsupported by this browser'))
         result = result['debugResult']
         if result.get('error'):
