@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Add an optional Chromium debugger permission to close tabs with leave-site confirmations
+
 ## [2.0.17] - 2026-11-12
 
 * Warn when a requested tab closure cannot be confirmed, such as when a browser confirmation dialog remains open

@@ -2,6 +2,8 @@
 On startup, connect to the "bruvtab_mediator" app.
 */
 
+importScripts('force-close.js');
+
 //const GET_WORDS_SCRIPT = '[...new Set(document.body.innerText.match(/\\w+/g))].sort().join("\\n");';
 const GET_WORDS_SCRIPT = '[...new Set(document.documentElement.innerText.match(#match_regex#))].sort().join(#join_with#);';
 //const GET_TEXT_SCRIPT = 'document.body.innerText.replace(/\\n|\\r|\\t/g, " ");';
@@ -618,7 +620,7 @@ function moveTabs(move_triplets) {
   );
 }
 
-function closeTabs(tab_ids) {
+function closeTabsNormally(tab_ids) {
   let replied = false;
   let verificationStarted = false;
   const reply = unconfirmed => {
@@ -1093,7 +1095,7 @@ function handleNativeMessage(command) {
 
   else if (command['name'] == 'close_tabs') {
     console.log('Closing tabs:', command['tab_ids']);
-    closeTabs(command['tab_ids']);
+    closeWithOptionalDebugger(command['tab_ids'], closeTabsNormally);
   }
 
   else if (command['name'] == 'move_tabs') {

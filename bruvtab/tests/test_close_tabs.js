@@ -8,7 +8,8 @@ for (const file of ['background.js', 'chrome/background.js', 'firefox/background
   for (const scenario of ['closed', 'prompt', 'query stalled']) {
     test(`${file}: ${scenario}`, async () => {
       const source = fs.readFileSync(`bruvtab/extension/${file}`, 'utf8');
-      const code = source.slice(source.indexOf('function closeTabs(tab_ids) {'), source.indexOf('function openUrls('));
+      const name = file.startsWith('chrome/') ? 'closeTabsNormally' : 'closeTabs';
+      const code = source.slice(source.indexOf(`function ${name}(tab_ids) {`), source.indexOf('function openUrls('));
       const timers = [];
       const messages = [];
       let queries = 0;
@@ -26,7 +27,7 @@ for (const file of ['background.js', 'chrome/background.js', 'firefox/background
         port: {postMessage: message => messages.push(JSON.parse(message))},
         setTimeout: (callback, delay) => { const timer = {callback, delay}; timers.push(timer); return timer; },
         clearTimeout: timer => { timer.cleared = true; }};
-      vm.runInNewContext(`${code}\ncloseTabs([1]);`, context);
+      vm.runInNewContext(`${code}\n${name}([1]);`, context);
       await Promise.resolve();
       for (const timer of timers.sort((a, b) => a.delay - b.delay)) {
         if (!timer.cleared) timer.callback();
