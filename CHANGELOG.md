@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-12
+
 * Add full-page Chromium screenshots, PDF export, and console and network event monitoring
 * Close Chromium tabs that show leave-site confirmations using debugger access
 

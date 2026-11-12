@@ -3,7 +3,7 @@
   "description": "Control your browser's tabs from command line",
   "manifest_version": 3,
   "name": "BruvTab",
-  "version": "2.0.17",
+  "version": "2.1.0",
   "background": {
     "service_worker": "background.js"
   },
