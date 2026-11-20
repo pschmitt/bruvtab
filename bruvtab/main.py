@@ -91,6 +91,7 @@ from bruvtab.mediator.log import bruvtab_logger
 from bruvtab.operations import make_update
 from bruvtab.platform import is_windows
 from bruvtab.platform import make_windows_path_double_sep
+from bruvtab.platform import native_messaging_host_dirs
 from bruvtab.platform import register_native_manifest_windows_brave
 from bruvtab.platform import register_native_manifest_windows_chrome
 from bruvtab.platform import register_native_manifest_windows_firefox
@@ -1068,63 +1069,42 @@ def show_clients(args):
 def install_mediator(args):
     bruvtab_logger.info('Installing mediators')
     mediator_path = which('bruvtab_mediator')
-    if is_windows():
+    windows = is_windows()
+    if windows:
         mediator_path = make_windows_path_double_sep(mediator_path)
 
-    native_app_manifests = [
-        ('mediator/firefox_mediator.json',
-         '~/.mozilla/native-messaging-hosts/bruvtab_mediator.json'),
-        ('mediator/chromium_mediator.json',
-         '~/.config/chromium/NativeMessagingHosts/bruvtab_mediator.json'),
-        ('mediator/chromium_mediator.json',
-         '~/.config/google-chrome/NativeMessagingHosts/bruvtab_mediator.json'),
-        ('mediator/chromium_mediator.json',
-         '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts/bruvtab_mediator.json'),
-    ]
+    host_dirs = native_messaging_host_dirs()
+    selected_browsers = host_dirs if args.browser == 'all' else (args.browser,)
+    browsers_by_dir = {}
+    for browser in selected_browsers:
+        browsers_by_dir.setdefault(host_dirs[browser], browser)
 
-    # Filter by requested browser; default is chrome to avoid touching Firefox
-    # on systems where its path may be read-only (e.g., NixOS managed setups).
-    browser_token = None
-    if getattr(args, 'browser', None) and args.browser != 'all':
-        browser_map = {
-            'firefox': 'mozilla',
-            'chromium': 'chromium',
-            'chrome': 'google-chrome',
-            'brave': 'Brave-Browser',
-        }
-        browser_token = browser_map.get(args.browser)
-        native_app_manifests = [
-            (src, dst) for (src, dst) in native_app_manifests if browser_token in dst
-        ]
+    windows_registrations = {
+        'firefox': register_native_manifest_windows_firefox,
+        'chrome': register_native_manifest_windows_chrome,
+        'brave': register_native_manifest_windows_brave,
+    }
 
-    if args.tests:
-        tests_targets = [
-            ('mediator/chromium_mediator_tests.json',
-             '~/.config/chromium/NativeMessagingHosts/bruvtab_mediator.json'),
-            ('mediator/chromium_mediator_tests.json',
-             '~/.config/google-chrome/NativeMessagingHosts/bruvtab_mediator.json'),
-        ]
-        if browser_token:
-            tests_targets = [(s, d) for (s, d) in tests_targets if browser_token in d]
-        native_app_manifests.extend(tests_targets)
-
-    for filename, destination in native_app_manifests:
-        destination = os.path.expanduser(os.path.expandvars(destination))
+    for directory, browser in browsers_by_dir.items():
+        if browser == 'firefox':
+            filename = 'mediator/firefox_mediator.json'
+        elif args.tests and browser in ('chromium', 'chrome'):
+            filename = 'mediator/chromium_mediator_tests.json'
+        else:
+            filename = 'mediator/chromium_mediator.json'
+        directory = os.path.expanduser(os.path.expandvars(directory))
+        destination = os.path.join(directory, 'bruvtab_mediator.json')
         template = resources.files('bruvtab').joinpath(filename).read_text(encoding='utf8')
         manifest = template.replace(r'$PWD/bruvtab_mediator.py', mediator_path)
         bruvtab_logger.info('Installing template %s into %s', filename, destination)
         print_info('Installing mediator manifest %s' % destination)
 
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        with open(destination, 'w') as file_:
+        os.makedirs(directory, exist_ok=True)
+        with open(destination, 'w', encoding='utf8') as file_:
             file_.write(manifest)
 
-        if is_windows() and 'mozilla' in destination:
-            register_native_manifest_windows_firefox(destination)
-        if is_windows() and 'chrome' in destination:
-            register_native_manifest_windows_chrome(destination)
-        if is_windows() and 'Brave' in destination:
-            register_native_manifest_windows_brave(destination)
+        if windows and browser in windows_registrations:
+            windows_registrations[browser](destination)
 
     print_info('Firefox extension is bundled in the BruvTab package output.')
     print_info('Chrome extension is bundled in the BruvTab package output.')
