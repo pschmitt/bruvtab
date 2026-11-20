@@ -939,6 +939,12 @@ function handleNativeMessage(command) {
     updateTabs(command['updates']);
   }
 
+  else if (command['name'] == 'tab_group_command') {
+    const responsePort = port;
+    tabGroupCommand(browser, command).then(result => responsePort.postMessage(result))
+      .catch(error => console.warn('Could not return tab group result:', error));
+  }
+
   else if (command['name'] == 'media_control') {
     console.log('Controlling media:', command['window_id'], command['tab_id'], command['action']);
     mediaControl(command['window_id'], command['tab_id'], command['action']);

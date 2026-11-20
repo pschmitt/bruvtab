@@ -4,6 +4,7 @@ On startup, connect to the "bruvtab_mediator" app.
 
 importScripts('force-close.js');
 importScripts('debugger-features.js');
+importScripts('tab-groups.js');
 
 //const GET_WORDS_SCRIPT = '[...new Set(document.body.innerText.match(/\\w+/g))].sort().join("\\n");';
 const GET_WORDS_SCRIPT = '[...new Set(document.documentElement.innerText.match(#match_regex#))].sort().join(#join_with#);';
@@ -1117,6 +1118,12 @@ function handleNativeMessage(command) {
   else if (command['name'] == 'update_tabs') {
     console.log('Updating tabs:', command['updates']);
     updateTabs(command['updates']);
+  }
+
+  else if (command['name'] == 'tab_group_command') {
+    const responsePort = port;
+    tabGroupCommand(chrome, command).then(result => responsePort.postMessage(result))
+      .catch(error => console.warn('Could not return tab group result:', error));
   }
 
   else if (command['name'] == 'media_control') {

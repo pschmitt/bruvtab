@@ -183,6 +183,49 @@ class SingleMediatorAPI(object):
             raise RuntimeError(result['error'])
         return result
 
+    def tab_group_command(self, payload):
+        unconfirmed = {
+            'ok': False,
+            'error': 'Could not confirm the tab group operation. Inspect the browser before retrying.',
+        }
+        try:
+            response = self._post('/tab_group_command', {'command': json.dumps(payload)})
+        except HTTPError as error:
+            if error.code == 404:
+                return {'ok': False, 'error': 'Tab groups require an updated BruvTab mediator'}
+            if error.code == 400:
+                try:
+                    result = json.load(error)
+                except (OSError, TypeError, ValueError):
+                    return {'ok': False, 'error': 'The BruvTab mediator rejected the tab group request'}
+                if isinstance(result, dict) and result.get('ok') is False and isinstance(result.get('error'), str):
+                    return result
+                return {'ok': False, 'error': 'The BruvTab mediator rejected the tab group request'}
+            return unconfirmed
+        except (OSError, UnicodeDecodeError):
+            return unconfirmed
+
+        try:
+            result = json.loads(response)
+        except (TypeError, ValueError):
+            return unconfirmed
+        if not isinstance(result, dict):
+            return unconfirmed
+        error = result.get('error')
+        if isinstance(error, str) and error.startswith('Unknown command:'):
+            return {'ok': False, 'error': 'Tab groups require an updated BruvTab browser extension'}
+        if result.get('ok') is False and isinstance(error, str):
+            return result
+        if result.get('ok') is True:
+            action = payload.get('action')
+            if action in ('create', 'update') and isinstance(result.get('group'), dict):
+                return result
+            if action == 'list' and isinstance(result.get('groups'), list):
+                return result
+            if action == 'ungroup' and isinstance(result.get('tabIds'), list):
+                return result
+        return unconfirmed
+
     def get_screenshot(self, args):
         tab_id = getattr(args, 'tab_id', None)
         wait = getattr(args, 'wait', 0)
