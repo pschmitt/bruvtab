@@ -560,34 +560,49 @@ def list_tabs(args):
 
 def close_query_info(args):
     """Return the tabs.query filters given to the close command, if any."""
+    # --playing and --muted narrow the other filters rather than replace them
+    flags = {}
+    if getattr(args, 'playing', False):
+        flags['audible'] = True
+    if getattr(args, 'close_muted', False):
+        flags['muted'] = True
     if args.info is not None:
-        return loads(args.info)
-    filters = command_specific_args(args)
-    for key in ('tab_ids', 'playing', 'close_muted'):
-        filters.pop(key, None)
-    return filters
+        if not flags:
+            return loads(args.info)
+        try:
+            filters = loads(args.info)
+        except ValueError:
+            filters = None
+        if not isinstance(filters, dict):
+            raise ValueError('-info must be a JSON object')
+    else:
+        filters = command_specific_args(args)
+        for key in ('tab_ids', 'playing', 'close_muted'):
+            filters.pop(key, None)
+    return {**filters, **flags}
 
 
 def close_tabs(args):
     api = MultipleMediatorsAPI(create_clients_from_args(args))
 
-    if getattr(args, 'playing', False):
-        tab_ids = list(get_playing_tab_ids(api))
-        if not tab_ids:
-            print_error('No currently playing tabs found')
-            return 1
-    elif getattr(args, 'close_muted', False):
-        tab_ids = list(get_muted_tab_ids(api))
-        if not tab_ids:
-            print_error('No muted tabs found')
-            return 1
-    elif query_info := close_query_info(args):
+    try:
+        query_info = close_query_info(args)
+    except ValueError as e:
+        print_error(str(e))
+        return 1
+    if query_info:
         if args.tab_ids:
             print_error('Specify either tab IDs or query filters, not both')
             return 1
         tab_ids = list(get_query_tab_ids(api, query_info))
         if not tab_ids:
-            print_error('No matching tabs found')
+            only_flag = args.info is None and len(query_info) == 1
+            if only_flag and getattr(args, 'playing', False):
+                print_error('No currently playing tabs found')
+            elif only_flag and getattr(args, 'close_muted', False):
+                print_error('No muted tabs found')
+            else:
+                print_error('No matching tabs found')
             return 1
     else:
         tab_ids = args.tab_ids
@@ -1275,7 +1290,8 @@ def add_tab_query_arguments(parser):
                                    help='the position of the tabs within their windows.')
     parser.add_argument('-info', type=str,
                                    help='the queryInfo parameter as outlined here: https://developer.chrome.com/extensions/tabs#method-query. '
-                                        'All other query arguments are ignored if this argument is present.')
+                                        'All other query arguments are ignored if this argument is present, '
+                                        'except --playing and --muted of the "close" command.')
 
 
 def build_parser():
@@ -1325,9 +1341,9 @@ def build_parser():
     parser_close_tabs_ids = parser_close_tabs.add_argument('tab_ids', type=str, nargs='*',
                                                            help='Tab IDs to close')
     parser_close_tabs.add_argument('--playing', action='store_true', default=False,
-                                   help='Close all currently audible tabs')
+                                   help='Close the currently audible tabs (that match the other filters, if any)')
     parser_close_tabs.add_argument('--muted', dest='close_muted', action='store_true', default=False,
-                                   help='Close all muted tabs')
+                                   help='Close the muted tabs (that match the other filters, if any)')
     add_tab_query_arguments(parser_close_tabs)
 
     parser_activate_tab = subparsers.add_parser(

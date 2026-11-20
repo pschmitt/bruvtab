@@ -397,6 +397,114 @@ class TestQueryUpdate(WithMediator):
             {'name': 'close_tabs', 'tab_ids': [2]},
         ]
 
+    def test_close_playing_flag_combines_with_query_filters(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tVideo\thttps://video.example.com/watch'],
+            'OK',
+        ])
+
+        self._run_commands(['close', '--playing', '-url', 'https://video.example.com/*'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs',
+             'query_info': encode_query('{"url": ["https://video.example.com/*"], "audible": true}')},
+            {'name': 'close_tabs', 'tab_ids': [2]},
+        ]
+
+    def test_close_muted_flag_combines_with_query_filters(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [],
+        ])
+
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['close', '--muted', '-title', 'nothing'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': encode_query('{"title": "nothing", "muted": true}')},
+        ]
+        print_error.assert_called_once_with('No matching tabs found')
+        assert result == 1
+
+    def test_close_rejects_tab_ids_with_playing_flag(self):
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['close', '--playing', 'a.1.2'])
+
+        print_error.assert_called_once_with('Specify either tab IDs or query filters, not both')
+        assert result == 1
+
+    def test_close_rejects_tab_ids_with_muted_flag(self):
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['close', '--muted', 'a.1.2'])
+
+        print_error.assert_called_once_with('Specify either tab IDs or query filters, not both')
+        assert result == 1
+
+    def test_close_playing_and_muted_flags_close_tabs_that_are_both(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tVideo\thttps://video.example.com/watch'],
+            'OK',
+        ])
+
+        self._run_commands(['close', '--playing', '--muted'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': encode_query('{"audible": true, "muted": true}')},
+            {'name': 'close_tabs', 'tab_ids': [2]},
+        ]
+
+    def test_close_playing_flag_combines_with_info(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            ['1.2\tVideo\thttps://video.example.com/watch'],
+            'OK',
+        ])
+
+        self._run_commands(['close', '--playing', '-info', '{"pinned": false}'])
+
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': encode_query('{"pinned": false, "audible": true}')},
+            {'name': 'close_tabs', 'tab_ids': [2]},
+        ]
+
+    def test_close_flag_with_non_object_info_reports_error(self):
+        for info in ('[]', 'null', '"x"', '{bad'):
+            with patch('bruvtab.main.print_error') as print_error:
+                result = self._run_commands(['close', '--playing', '-info', info])
+
+            print_error.assert_called_once_with('-info must be a JSON object')
+            assert result == 1
+
+    def test_close_playing_flag_reports_no_playing_tabs(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [],
+        ])
+
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['close', '--playing'])
+
+        print_error.assert_called_once_with('No currently playing tabs found')
+        assert result == 1
+
+    def test_close_audible_filter_reports_no_matching_tabs(self):
+        self.mediator.transport.received_extend([
+            'mocked',
+            [],
+        ])
+
+        with patch('bruvtab.main.print_error') as print_error:
+            result = self._run_commands(['close', '+audible'])
+
+        print_error.assert_called_once_with('No matching tabs found')
+        assert result == 1
+
     def test_update_info_sends_parsed_json(self):
         self.mediator.transport.received_extend([
             'mocked',
