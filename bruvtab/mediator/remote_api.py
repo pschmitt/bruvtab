@@ -86,6 +86,10 @@ class BrowserRemoteAPI:
                               'action': action, 'options': options})
         return self._transport.recv()
 
+    def tab_group_command(self, command):
+        self._transport.send({**command, 'name': 'tab_group_command'})
+        return self._transport.recv()
+
     def close_tabs(self, tab_ids: str):
         """
         :param tab_ids: Comma-separated list of tab IDs to close.

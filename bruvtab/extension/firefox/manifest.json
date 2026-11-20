@@ -5,6 +5,7 @@
   "version": "2.1.0",
   "background": {
     "scripts": [
+      "tab-groups.js",
       "background.js"
     ]
   },
@@ -14,6 +15,7 @@
   "permissions": [
     "nativeMessaging",
     "tabs",
+    "tabGroups",
     "activeTab",
     "<all_urls>"
   ],

@@ -13,6 +13,7 @@
   "permissions": [
     "nativeMessaging",
     "tabs",
+    "tabGroups",
     "windows",
     "activeTab",
     "scripting",

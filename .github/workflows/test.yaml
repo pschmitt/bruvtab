@@ -35,9 +35,9 @@ jobs:
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
 
-      - name: Test extension close handling
+      - name: Test extension behavior
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: node --test bruvtab/tests/test_close_tabs.js bruvtab/tests/test_force_close.js bruvtab/tests/test_debugger_features.js
+        run: node --test bruvtab/tests/test_close_tabs.js bruvtab/tests/test_force_close.js bruvtab/tests/test_debugger_features.js bruvtab/tests/test_tab_groups.js
 
       - name: Test with pytest
         run: |
