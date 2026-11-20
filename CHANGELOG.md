@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Fix `bruvtab close --playing` and `--muted` ignoring the query filters (`-url`, `-title`, ...) and tab IDs given with them, and closing every audible or muted tab
+
 ## [2.1.0] - 2026-11-12
 
 * Add full-page Chromium screenshots, PDF export, and console and network event monitoring
