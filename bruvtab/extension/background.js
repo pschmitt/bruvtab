@@ -22,7 +22,7 @@ class BrowserTabs {
     throw new Error('list is not implemented');
   }
 
-  query(queryInfo, onSuccess) {
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
     throw new Error('query is not implemented');
   }
 
@@ -67,11 +67,8 @@ class FirefoxTabs extends BrowserTabs {
     );
   }
 
-  query(queryInfo, onSuccess) {
-    this._browser.tabs.query(queryInfo).then(
-      onSuccess,
-      (error) => console.log(`Error executing queryTabs: ${error}`)
-    );
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
+    this._browser.tabs.query(queryInfo).then(onSuccess, onError);
   }
 
   close(tab_ids, onSuccess) {
@@ -144,8 +141,14 @@ class ChromeTabs extends BrowserTabs {
     });
   }
 
-  query(queryInfo, onSuccess) {
-    this._browser.tabs.query(queryInfo, onSuccess);
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
+    this._browser.tabs.query(queryInfo, tabs => {
+      if (this._browser.runtime.lastError) {
+        onError(this._browser.runtime.lastError.message);
+      } else {
+        onSuccess(tabs);
+      }
+    });
   }
 
   close(tab_ids, onSuccess, onError) {
@@ -283,7 +286,8 @@ function queryTabsOnSuccess(tabs) {
 
 function queryTabsOnFailure(error) {
   console.error(error);
-  port.postMessage([]);
+  // The CLI reports this line instead of treating it as a tab
+  port.postMessage([`ERROR\t${error && error.message ? error.message : error}`]);
 }
 
 function queryTabs(query_info) {
@@ -311,7 +315,7 @@ function queryTabs(query_info) {
       return o;
     }, {})
 
-    browserTabs.query(query, queryTabsOnSuccess);
+    browserTabs.query(query, queryTabsOnSuccess, queryTabsOnFailure);
   }
   catch(error) {
     queryTabsOnFailure(error);

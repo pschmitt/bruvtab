@@ -65,6 +65,10 @@ class HttpClient:
             return response.read().decode('utf8')
 
 
+class QueryError(Exception):
+    """The browser could not run a tab query; the message says why."""
+
+
 class StartupTimeout(BaseException):
     pass
 
@@ -213,7 +217,15 @@ class SingleMediatorAPI(object):
                 return []
 
         result = self._get('/query_tabs/%s' % encode_query(json.dumps(query)))
+        if result == '<ERROR>':
+            raise QueryError('The mediator of client %s failed or the browser did not answer the query; '
+                             'see /tmp/bruvtab_mediator.log (for a sandboxed browser such as a Flatpak, '
+                             'the browser\'s own temporary directory)' % self._prefix)
         lines = result.splitlines()[:MAX_NUMBER_OF_TABS]
+        for line in lines:
+            if line.startswith('ERROR\t'):
+                raise QueryError('The browser of client %s refused the query: %s'
+                                 % (self._prefix, line[len('ERROR\t'):]))
         return self.prefix_tabs(lines)
 
     def query_tabs_safe(self, args, print_error=False):
