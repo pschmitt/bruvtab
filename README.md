@@ -119,6 +119,11 @@ uv tool install bruvtab
 bruvtab install
 ```
 
+This installs the Chrome manifest by default. On macOS, Chrome and Brave
+share that manifest. Use `bruvtab install --browser firefox`,
+`--browser chromium`, or `--browser brave` to select a browser, or
+`bruvtab install --browser all` to install all supported manifests.
+
 3. Install Browser extension:
 
 * **Firefox**: Prefer the signed XPI attached to each GitHub release, or use the flake's self-hosted XPI output (`firefoxAddon`, alias `firefoxXpi`). The release workflow publishes listed AMO builds and signs separate self-distributed XPIs for GitHub releases.

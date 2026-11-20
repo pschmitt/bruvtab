@@ -48,6 +48,25 @@ def is_windows() -> bool:
     return platform.system() == 'Windows'
 
 
+def native_messaging_host_dirs() -> dict[str, str]:
+    if platform.system() == 'Darwin':
+        app_support = '~/Library/Application Support'
+        chrome_dir = f'{app_support}/Google/Chrome/NativeMessagingHosts'
+        return {
+            'firefox': f'{app_support}/Mozilla/NativeMessagingHosts',
+            'chromium': f'{app_support}/Chromium/NativeMessagingHosts',
+            'chrome': chrome_dir,
+            # Brave looks up native messaging hosts in Chrome's directory on macOS.
+            'brave': chrome_dir,
+        }
+    return {
+        'firefox': '~/.mozilla/native-messaging-hosts',
+        'chromium': '~/.config/chromium/NativeMessagingHosts',
+        'chrome': '~/.config/google-chrome/NativeMessagingHosts',
+        'brave': '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts',
+    }
+
+
 def get_editor() -> str:
     mapping = {
         'Windows': 'notepad'

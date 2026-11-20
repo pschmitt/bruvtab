@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+* Install native messaging manifests in the macOS locations used by Chrome, Brave, Chromium, and Firefox
+
 ## [2.1.0] - 2026-11-12
 
 * Add full-page Chromium screenshots, PDF export, and console and network event monitoring
