@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+* `-url` patterns may leave out the scheme and the path: `example.com` now means `*://example.com/*`.  A misplaced `*` in the host is refused with an explanation and an example
+* Fix a query the browser rejects, such as an invalid URL pattern, hanging for 9 seconds, restarting the mediator and making `bruvtab close` try to close a tab called `<ERROR>`; the browser's error message is shown instead
+
 ## [2.1.0] - 2026-11-12
 
 * Add full-page Chromium screenshots, PDF export, and console and network event monitoring

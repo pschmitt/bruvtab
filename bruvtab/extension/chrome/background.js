@@ -25,7 +25,7 @@ class BrowserTabs {
     throw new Error('list is not implemented');
   }
 
-  query(queryInfo, onSuccess) {
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
     throw new Error('query is not implemented');
   }
 
@@ -82,7 +82,7 @@ class FirefoxTabs extends BrowserTabs {
     );
   }
 
-  query(queryInfo, onSuccess) {
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
     if (queryInfo.hasOwnProperty('windowFocused')) {
       let keepFocused = queryInfo['windowFocused']
       delete queryInfo.windowFocused;
@@ -99,13 +99,10 @@ class FirefoxTabs extends BrowserTabs {
             onSuccess(tabs);
           });
         },
-        (error) => console.log(`Error executing queryTabs: ${error}`)
+        onError
       );
     } else {
-      this._browser.tabs.query(queryInfo).then(
-        onSuccess,
-        (error) => console.log(`Error executing queryTabs: ${error}`)
-      );
+      this._browser.tabs.query(queryInfo).then(onSuccess, onError);
     }
   }
 
@@ -231,11 +228,15 @@ class ChromeTabs extends BrowserTabs {
     });
   }
 
-  query(queryInfo, onSuccess) {
+  query(queryInfo, onSuccess, onError = error => console.error(`Error executing queryTabs: ${error}`)) {
     if (queryInfo.hasOwnProperty('windowFocused')) {
       let keepFocused = queryInfo['windowFocused']
       delete queryInfo.windowFocused;
       this._browser.tabs.query(queryInfo, tabs => {
+        if (this._browser.runtime.lastError) {
+          onError(this._browser.runtime.lastError.message);
+          return;
+        }
         Promise.all(tabs.map(tab => {
           return new Promise(resolve => {
             this._browser.windows.get(tab.windowId, {populate: false}, window => {
@@ -248,7 +249,13 @@ class ChromeTabs extends BrowserTabs {
         });
       });
     } else {
-      this._browser.tabs.query(queryInfo, onSuccess);
+      this._browser.tabs.query(queryInfo, tabs => {
+        if (this._browser.runtime.lastError) {
+          onError(this._browser.runtime.lastError.message);
+        } else {
+          onSuccess(tabs);
+        }
+      });
     }
   }
 
@@ -562,7 +569,8 @@ function queryTabsOnSuccess(tabs) {
 
 function queryTabsOnFailure(error) {
   console.error(error);
-  port.postMessage([]);
+  // The CLI reports this line instead of treating it as a tab
+  port.postMessage([`ERROR\t${error && error.message ? error.message : error}`]);
 }
 
 function queryTabs(query_info) {
@@ -590,7 +598,7 @@ function queryTabs(query_info) {
       return o;
     }, {})
 
-    browserTabs.query(query, queryTabsOnSuccess);
+    browserTabs.query(query, queryTabsOnSuccess, queryTabsOnFailure);
   }
   catch(error) {
     queryTabsOnFailure(error);

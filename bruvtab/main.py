@@ -55,7 +55,7 @@ import sys
 import time
 import argcomplete
 from base64 import b64decode
-from argparse import ArgumentParser, SUPPRESS
+from argparse import ArgumentParser, ArgumentTypeError, SUPPRESS
 from importlib import resources
 from functools import partial
 from itertools import groupby
@@ -73,6 +73,7 @@ from rich.text import Text
 from rich_argparse import RichHelpFormatter
 
 from bruvtab.api import MultipleMediatorsAPI
+from bruvtab.api import QueryError
 from bruvtab.api import SingleMediatorAPI
 from bruvtab.const import DEFAULT_GET_HTML_DELIMITER_REGEX
 from bruvtab.const import DEFAULT_GET_HTML_REPLACE_WITH
@@ -587,7 +588,13 @@ def close_tabs(args):
             return 1
         tab_ids = list(get_query_tab_ids(api, query_info))
         if not tab_ids:
-            print_error('No matching tabs found')
+            patterns = query_info.get('url') if isinstance(query_info, dict) else None
+            if isinstance(patterns, str):
+                patterns = [patterns]
+            if patterns:
+                print_error('No matching tabs found for -url %s' % ' '.join(patterns))
+            else:
+                print_error('No matching tabs found')
             return 1
     else:
         tab_ids = args.tab_ids
@@ -1219,6 +1226,38 @@ def command_specific_args(args):
     return {k: v for k, v in vars(args).items() if v is not None and k not in excluded}
 
 
+URL_PATTERN_EXAMPLE = "e.g. 'https://example.com/*', '*.example.com' or 'example.com/path/*'"
+# Schemes written without '//', such as about:blank; 'localhost:8080' is a host with a port
+OPAQUE_URL_SCHEMES = ('about', 'blob', 'data', 'javascript', 'mailto', 'urn', 'view-source')
+
+
+def url_pattern(pattern: str) -> str:
+    """Turn a -url argument into a valid browser match pattern.
+
+    A missing scheme matches any scheme and a missing path matches any path,
+    so 'example.com' becomes '*://example.com/*'.  A misplaced '*' in the
+    host, which the browser would reject, is refused with an explanation.
+    Anything else is left for the browser to judge.
+    """
+    if pattern == '<all_urls>':
+        return pattern
+    match = re.match(r'(\*|[A-Za-z][A-Za-z0-9+.-]*)://', pattern)
+    if match:
+        scheme, rest = match.group(1).lower(), pattern[match.end():]
+    elif pattern.split(':', 1)[0].lower() in OPAQUE_URL_SCHEMES:
+        return pattern
+    else:
+        scheme, rest = '*', pattern
+    host, slash, path = rest.partition('/')
+    if not host and scheme != 'file':
+        raise ArgumentTypeError('invalid URL pattern %r: no host; %s' % (pattern, URL_PATTERN_EXAMPLE))
+    name = host if host.startswith('[') else host.rsplit(':', 1)[0]  # without the port
+    if '*' in name and name != '*' and ('*' in name[2:] or not name.startswith('*.')):
+        raise ArgumentTypeError("invalid URL pattern %r: '*' in the host must be the whole host or its "
+                                "start, as in '*.example.org' (which also matches example.org)" % pattern)
+    return '%s://%s/%s' % (scheme, host, path if slash else '*')
+
+
 def add_tab_query_arguments(parser):
     """Add the chrome.tabs.query filters (+/-flag, -url, ...) to a parser using prefix_chars='-+'."""
     parser.add_argument('+active', action='store_const', const=True, default=None,
@@ -1265,8 +1304,11 @@ def add_tab_query_arguments(parser):
                                    help='whether the tabs have completed loading i.e. loading or complete.')
     parser.add_argument('-title', type=str,
                                    help='match page titles against a pattern.')
-    parser.add_argument('-url', type=str, action='append',
-                                   help='match tabs against one or more URL patterns. Fragment identifiers are not matched. see https://developer.chrome.com/extensions/match_patterns')
+    parser.add_argument('-url', type=url_pattern, action='append',
+                                   help='match tabs against one or more URL patterns, e.g. "example.com" '
+                                        '(any scheme, any path), "*.example.com" (also subdomains) or '
+                                        '"https://example.com/docs/*". Fragment identifiers are not matched. '
+                                        'See https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns')
     parser.add_argument('-windowId', type=int,
                                    help='the ID of the parent window, or windows.WINDOW_ID_CURRENT for the current window.')
     parser.add_argument('-windowType', type=str, choices=['normal', 'popup', 'panel', 'app', 'devtools'],
@@ -1642,6 +1684,9 @@ def run_commands(args):
         result = args.func(args)
     except BrokenPipeError:
         pass
+    except QueryError as e:
+        print_error(str(e))
+        result = 1
     return result
 
 
