@@ -22,8 +22,8 @@ Usage: $(basename "$0") prepare VERSION | tag
 
   prepare VERSION  Bump to VERSION (X.Y.Z), date the changelog, commit and push.
   tag              Push the GPG-signed vVERSION tag once CI (build, lint, test and
-                   docker, where the repository has them) and nixbot are green
-                   for HEAD. Nixbot is required when nixbot.toml is present.
+                   docker, where the repository has them) and Nix CI are green
+                   for HEAD. Circus is required when nixbot.toml is present.
                    Cancelled jobs matching \$RELEASE_OPTIONAL_JOBS (an extended
                    regex, default "macos") do not count as failures.
                    The release workflow then signs and publishes.
@@ -178,6 +178,47 @@ wait_for_nixbot() {
   done
 }
 
+# Jobset summaries cover evaluation and all builds, with separate contexts for
+# main and main-arm. Per-job contexts are shared across architectures.
+wait_for_circus() {
+  local commit="$1" statuses context state jobset found pending
+  local -a jobsets
+  read -r -a jobsets <<< "${RELEASE_CIRCUS_JOBSETS:-main main-arm}"
+  if [[ ${#jobsets[@]} -eq 0 ]]
+  then
+    die "No Circus release jobsets configured"
+    return 1
+  fi
+  while true
+  do
+    if ! statuses="$(gh api "repos/{owner}/{repo}/commits/$commit/status" \
+      --jq '.statuses[] | select(.context | startswith("circus/jobset/")) | [.context, .state] | @tsv')"
+    then
+      die "Could not read Circus statuses for ${commit:0:7}"
+      return 1
+    fi
+    pending=0
+    for jobset in "${jobsets[@]}"
+    do
+      found=
+      while IFS=$'\t' read -r context state
+      do
+        [[ "$context" == "circus/jobset/$jobset" ]] || continue
+        found=1
+        case "$state" in
+          success) ;;
+          pending) pending=1 ;;
+          *) die "Circus jobset $jobset did not succeed for ${commit:0:7}: ${state:-missing state}"; return 1 ;;
+        esac
+      done <<< "$statuses"
+      [[ -n "$found" ]] || pending=1
+    done
+    [[ "$pending" == 0 ]] && return 0
+    printf 'Waiting for Circus jobsets on %s…\n' "${commit:0:7}" >&2
+    sleep 30
+  done
+}
+
 prepare() {
   local version="$1" root today file
   local -a files=()
@@ -223,7 +264,11 @@ tag() {
   done
   if [[ -f "$root/nixbot.toml" ]]
   then
-    wait_for_nixbot "$commit" || return 1
+    case "${RELEASE_NIX_CI:-circus}" in
+      circus) wait_for_circus "$commit" || return 1 ;;
+      nixbot) wait_for_nixbot "$commit" || return 1 ;;
+      *) die "Unknown RELEASE_NIX_CI: $RELEASE_NIX_CI"; return 1 ;;
+    esac
   fi
   git -C "$root" tag -s "v$version" -m "Release $version" "$commit" || return 1
   git -C "$root" push origin "v$version"

@@ -1,3 +1,7 @@
+# shellcheck shell=bash
+# Circus builds Bruvtab on x86_64 only.
+export RELEASE_CIRCUS_JOBSETS=main
+
 # Project specifics for tools/release.sh: bruvtab's version lives in
 # bruvtab/__version__.py and in the two extension manifests.
 
