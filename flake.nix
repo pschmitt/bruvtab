@@ -46,6 +46,20 @@
     in
     {
       # Linux package builds and checks run on the self-hosted nixbot.
+      circus.consumerBuilds.nixos-config = {
+        repository = "pschmitt/nixos-config";
+        ref = "main";
+        input = "bruvtab";
+        follows = [
+          "nixpkgs"
+        ];
+        packages.aarch64-linux = [
+          "bruvtab"
+          "firefoxAddon"
+          "chromeCrx"
+        ];
+      };
+
       hydraJobs = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
         packages = self.packages.${system} or { };
         checks = self.checks.${system} or { };
