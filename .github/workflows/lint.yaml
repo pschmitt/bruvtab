@@ -15,5 +15,3 @@ jobs:
     with:
       build-command: 'true'
       firefox-dir: bruvtab/extension/firefox
-  release-script:
-    uses: pschmitt/ci-workflows/.github/workflows/release-script.yaml@main

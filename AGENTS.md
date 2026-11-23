@@ -45,8 +45,8 @@ bumps that need real work, and say which.
 Release with `just release-prepare X.Y.Z` (bumps `bruvtab/__version__.py` and
 the extension manifests, dates the changelog, commits and pushes), then
 `just release-tag` (waits for green CI on HEAD, then pushes the GPG-signed
-`vX.Y.Z` tag; unlock GPG first). `tools/release.sh` is a verbatim copy of the
-shared script in `pschmitt/ci-workflows`, with the Python specifics in
+`vX.Y.Z` tag; unlock GPG first). Both run the shared script with
+`nix run github:pschmitt/ci-workflows#release`, with the Python specifics in
 `tools/release-hooks.sh`. The release workflow publishes the Python packages and
 the browser extensions, then the shared pin workflow commits their hashes to
 `browser/packages/metadata.json` on `main`, which `flake.nix` reads.
