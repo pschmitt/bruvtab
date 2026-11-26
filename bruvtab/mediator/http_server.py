@@ -22,6 +22,48 @@ from bruvtab.mediator.transport import TransportError
 from bruvtab.utils import decode_query
 
 
+def validate_tab_group_command(command):
+    if not isinstance(command, dict) or not isinstance(command.get('action'), str):
+        raise ValueError('Tab group command must be a JSON object with an action')
+
+    fields = {
+        'create': ({'window_id', 'tab_ids'}, {'properties'}),
+        'list': (set(), {'window_id'}),
+        'update': ({'window_id', 'group_id', 'properties'}, set()),
+        'ungroup': ({'window_id', 'tab_ids'}, set()),
+    }
+    action = command['action']
+    if action not in fields:
+        raise ValueError('Unknown tab group action')
+    required, optional = fields[action]
+    supplied = command.keys() - {'action'}
+    if not required <= supplied <= required | optional:
+        raise ValueError(f'Invalid fields for tab group {action}')
+
+    def valid_id(value):
+        return type(value) is int and 0 <= value <= (2 ** 53 - 1)
+
+    for field in ('window_id', 'group_id'):
+        if field in command and not valid_id(command[field]):
+            raise ValueError(f'{field} must be a concrete browser ID')
+    if 'tab_ids' in command:
+        tab_ids = command['tab_ids']
+        if not isinstance(tab_ids, list) or not tab_ids or not all(map(valid_id, tab_ids)):
+            raise ValueError('tab_ids must be a non-empty list of concrete browser IDs')
+        if len(tab_ids) != len(set(tab_ids)):
+            raise ValueError('tab_ids must be unique')
+    if 'properties' in command:
+        properties = command['properties']
+        expected_types = {'title': str, 'color': str, 'collapsed': bool}
+        if not isinstance(properties, dict) or any(
+            key not in expected_types or type(value) is not expected_types[key]
+            for key, value in properties.items()
+        ):
+            raise ValueError('Invalid tab group properties')
+        if action == 'update' and not properties:
+            raise ValueError('Tab group update needs at least one property')
+
+
 class MediatorHttpServer:
     def __init__(self, host: str, port: int, remote_api: BrowserRemoteAPI, poll_interval: float):
         self.host: str = host
@@ -65,6 +107,7 @@ class MediatorHttpServer:
         self.app.route('/update_tabs', methods=['POST'])(self.update_tabs)
         self.app.route('/media_control/<int:window_id>/<int:tab_id>/<action>', methods=['GET'])(self.media_control)
         self.app.route('/debug_command', methods=['POST'])(self.debug_command)
+        self.app.route('/tab_group_command', methods=['POST'])(self.tab_group_command)
         self.app.route('/open_urls', methods=['POST'])(self.open_urls)
         self.app.route('/close_tabs/<tab_ids>', methods=['GET'])(self.close_tabs)
         self.app.route('/new_tab/<query>', methods=['GET'])(self.new_tab)
@@ -139,6 +182,24 @@ class MediatorHttpServer:
         result = self.remote_api.debug_command(command['tabId'], command['action'],
                                                command.get('options', {}))
         return dumps(result)
+
+    def tab_group_command(self):
+        payload = request.files.get('command')
+        if payload is None:
+            return {'ok': False, 'error': 'Missing tab group command'}, 400
+        try:
+            command = loads(payload.stream.read())
+        except ValueError:
+            return {'ok': False, 'error': 'Tab group command must contain valid JSON'}, 400
+        try:
+            validate_tab_group_command(command)
+        except ValueError as error:
+            return {'ok': False, 'error': str(error)}, 400
+
+        result = self.remote_api.tab_group_command(command)
+        if not isinstance(result, dict):
+            return {'ok': False, 'error': 'Invalid tab group response from browser extension'}, 502
+        return result
 
     def media_control(self, window_id, tab_id, action):
         result = self.remote_api.media_control(window_id, tab_id, action)

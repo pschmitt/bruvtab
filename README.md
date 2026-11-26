@@ -36,13 +36,13 @@ require the Chromium extension's debugger permission.
 
 ```txt
 Usage: bruvtab [-h] [--target TARGET_HOSTS] [--json]
-               {move,list,close,activate,active,screenshot,search,query,index,new,open,navigate,update,words,text,html,dup,windows,clients,install} ...
+               {move,list,group,close,activate,active,screenshot,search,query,index,new,open,navigate,update,words,text,html,dup,windows,clients,install} ...
 
 bruvtab (bruvtab = Browser Tabs) is a command-line tool that helps you manage browser tabs. It
 can help you list, close, reorder, open and activate your tabs.
 
 Positional Arguments:
-  {move,list,close,activate,active,screenshot,search,query,index,new,open,navigate,update,words,text,html,dup,windows,clients,install}
+  {move,list,group,close,activate,active,screenshot,search,query,index,new,open,navigate,update,words,text,html,dup,windows,clients,install}
     move                move tabs around. This command lists available tabs and runs the editor.
                         In the editor you can 1) reorder tabs -- tabs will be moved in the
                         browser 2) delete tabs -- tabs will be closed 3) change window ID of the
@@ -50,6 +50,7 @@ Positional Arguments:
     list                list available tabs. The command will request all available clients
                         (browser plugins, mediators), and will display browser tabs in the
                         following format: "<prefix>.<window_id>.<tab_id><Tab>Page title<Tab>URL"
+    group               Manage native browser tab groups.
     close               close specified tab IDs. Tab IDs should be in the following format:
                         "<prefix>.<window_id>.<tab_id>". You can use "list" command to obtain tab
                         IDs (first column)
@@ -123,6 +124,34 @@ bruvtab install
 
 * **Firefox**: Prefer the signed XPI attached to each GitHub release, or use the flake's self-hosted XPI output (`firefoxAddon`, alias `firefoxXpi`). The release workflow publishes listed AMO builds and signs separate self-distributed XPIs for GitHub releases.
 * **Chrome/Brave/Chromium**: Prefer the Chrome Web Store build once published. The release workflow also uploads Chrome CRX/ZIP artifacts and a self-hosted update manifest to GitHub releases.
+
+### Native tab groups
+
+The grouping commands need a compatible CLI, native mediator, and browser
+extension. The extension requires the `tabGroups` permission. When
+upgrading from an earlier release on Chromium, accept the new tab-group
+permission if the browser prompts you.
+
+```bash
+bruvtab group create --title Reading --color blue a.123.456 a.123.789
+bruvtab group list --json
+bruvtab group update a.123.42 --collapsed
+bruvtab group ungroup a.123.456 a.123.789
+```
+
+Use tab IDs from `bruvtab list` or `bruvtab query`, and use group IDs from
+`bruvtab group list`. `group create` and `group ungroup` also accept tab IDs
+from stdin. Specify `--per-window` for input spanning multiple windows.
+
+```bash
+bruvtab query -url 'https://chatgpt.com/*' | cut -f1 | \
+  bruvtab group create --title ChatGPT --per-window --dry-run
+```
+
+Each group is created within its own window. Creation protects pinned tabs,
+split views, and tabs already in a group. Select a tab outside a group
+before collapsing it. If naming fails after creation, use the reported
+group ID with `group update` to finish the operation.
 
 ### Shell completions
 

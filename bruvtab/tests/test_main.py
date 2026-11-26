@@ -414,6 +414,87 @@ class TestQueryUpdate(WithMediator):
         ]
 
 
+class TestTabGroups(WithMediator):
+    group = {'id': 7, 'windowId': 1, 'title': 'Reading', 'color': 'blue',
+             'collapsed': False, 'tabCount': 2}
+
+    def test_create_group_from_stdin_and_prints_prefixed_group_id(self):
+        self.mediator.transport.received_extend(['mocked', {'ok': True, 'group': self.group}])
+        with patch('bruvtab.main.read_stdin', return_value='a.1.2\na.1.3\n'), \
+                patch('bruvtab.main.print_json') as output:
+            result = self._run_commands(['group', 'create', '--title', 'Reading', '--color', 'blue', '--json'])
+
+        assert result == 0
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'tab_group_command', 'action': 'create', 'window_id': 1, 'tab_ids': [2, 3],
+             'properties': {'title': 'Reading', 'color': 'blue'}},
+        ]
+        output.assert_called_once_with([{**self.group, 'id': 'a.1.7'}])
+
+    def test_mixed_windows_require_explicit_opt_in(self):
+        self.mediator.transport.received_extend(['mocked'])
+        with patch('bruvtab.main.print_error') as error:
+            result = self._run_commands(['group', 'create', '--title', 'Reading', 'a.1.2', 'a.4.5'])
+
+        assert result == 1
+        assert '--per-window' in error.call_args.args[0]
+        self._assert_init()
+        assert self.mediator.transport.sent == []
+
+    def test_per_window_dry_run_reads_live_tabs_without_grouping(self):
+        self.mediator.transport.received_extend(['mocked', ['1.2\ttitle\turl'], ['4.5\ttitle\turl']])
+        with patch('bruvtab.main.print_json') as output:
+            result = self._run_commands(['group', 'create', '--title', 'Reading', '--per-window',
+                                         '--dry-run', 'a.1.2', 'a.4.5', '--json'])
+
+        assert result == 0
+        self._assert_init()
+        assert self.mediator.transport.sent == [
+            {'name': 'query_tabs', 'query_info': encode_query(
+                '{"windowId": 1, "groupId": -1, "pinned": false}')},
+            {'name': 'query_tabs', 'query_info': encode_query(
+                '{"windowId": 4, "groupId": -1, "pinned": false}')},
+        ]
+        output.assert_called_once_with([
+            {'window': 'a.1', 'tabs': ['a.1.2'], 'title': 'Reading'},
+            {'window': 'a.4', 'tabs': ['a.4.5'], 'title': 'Reading'},
+        ])
+
+    def test_partial_create_reports_group_id_and_stops_per_window_operation(self):
+        self.mediator.transport.received_extend(['mocked', {'ok': False, 'error': 'Could not name group', 'groupId': 7}])
+        with patch('bruvtab.main.print_error') as error:
+            result = self._run_commands(['group', 'create', '--title', 'Reading', '--per-window', 'a.1.2', 'a.4.5'])
+
+        assert result == 1
+        error.assert_called_once_with('a.1: Could not name group (created group a.1.7)')
+        self._assert_init()
+        assert len(self.mediator.transport.sent) == 1
+
+    def test_list_update_and_ungroup_use_scoped_ids(self):
+        command_cases = [
+            (['list'], {'action': 'list'},
+             {'groups': [self.group]}, [{**self.group, 'id': 'a.1.7'}]),
+            (['list', '--window', 'a.1'], {'action': 'list', 'window_id': 1},
+             {'groups': [self.group]}, [{**self.group, 'id': 'a.1.7'}]),
+            (['update', 'a.1.7', '--expanded'],
+             {'action': 'update', 'window_id': 1, 'group_id': 7, 'properties': {'collapsed': False}},
+             {'group': self.group}, [{**self.group, 'id': 'a.1.7'}]),
+            (['ungroup', 'a.1.2'], {'action': 'ungroup', 'window_id': 1, 'tab_ids': [2]},
+             {'tabIds': [2]}, ['a.1.2']),
+        ]
+        for args, request, response, expected in command_cases:
+            self.mediator.transport.reset()
+            self.mediator.transport.received_extend(['mocked', {'ok': True, **response}])
+            with patch('bruvtab.main.print_json') as output:
+                result = self._run_commands(['group', *args, '--json'])
+
+            assert result == 0
+            self._assert_init()
+            assert self.mediator.transport.sent == [{'name': 'tab_group_command', **request}]
+            output.assert_called_once_with(expected)
+
+
 class RecordingHttpClient:
     def __init__(self):
         self.paths = []

@@ -767,6 +767,124 @@ def query_tabs(args):
         print(tab)
 
 
+def tab_group_requests(args, clients):
+    action = args.group_action
+    properties = {key: value for key in ('title', 'color', 'collapsed')
+                  if (value := getattr(args, key, None)) is not None}
+    if not clients:
+        raise ValueError('No browser clients available')
+
+    if action == 'list':
+        if args.window is None:
+            return [(client, {'action': action}) for client in clients.values()]
+        if not re.fullmatch(r'[A-Za-z]\.\d+', args.window):
+            raise ValueError('Expected a window ID in <client>.<window> format')
+        prefix, window = args.window.split('.')
+        return [(clients[prefix], {'action': action, 'window_id': int(window)})]
+
+    if action == 'update':
+        if not is_tab_id(args.group_id):
+            raise ValueError('Expected a group ID in <client>.<window>.<group> format')
+        if not properties:
+            raise ValueError('Specify a title, color, or collapsed state to update')
+        prefix, window, group = args.group_id.split('.')
+        return [(clients[prefix], {'action': action, 'window_id': int(window),
+                                   'group_id': int(group), 'properties': properties})]
+
+    ids = args.tab_ids or split_tab_ids(read_stdin())
+    if not ids or any(not is_tab_id(tab) for tab in ids):
+        raise ValueError('Provide tab IDs in <client>.<window>.<tab> format')
+    if action == 'create' and not args.title.strip():
+        raise ValueError('Group title must not be empty')
+    batches = {}
+    for tab in ids:
+        prefix, window, tab_id = tab.split('.')
+        batches.setdefault((prefix, int(window)), {})[int(tab_id)] = None
+    if len(batches) > 1 and not args.per_window:
+        raise ValueError('Tabs belong to multiple browser windows. Use --per-window to process them separately.')
+    requests = []
+    for (prefix, window), tab_ids in batches.items():
+        request = {'action': action, 'window_id': window, 'tab_ids': list(tab_ids)}
+        if action == 'create':
+            request['properties'] = properties
+        requests.append((clients[prefix], request))
+    return requests
+
+
+def preview_tab_groups(requests, as_json):
+    plans = []
+    for api, request in requests:
+        window_id = request['window_id']
+        requested = [api.prefix_tab(f'{window_id}.{tab}') for tab in request['tab_ids']]
+        available = get_query_tab_ids(api, {'windowId': window_id, 'groupId': -1, 'pinned': False})
+        blocked = [tab for tab in requested if tab not in available]
+        if blocked:
+            raise ValueError('Unavailable, pinned, or already grouped tabs: ' + ', '.join(blocked))
+        if request['properties'].get('collapsed'):
+            active = get_query_tab_ids(api, {'windowId': window_id, 'active': True})
+            if active.intersection(requested):
+                raise ValueError('Select a tab outside the group before collapsing it')
+        plans.append({'window': api.prefix_tab(str(window_id)), 'tabs': requested,
+                      **request['properties']})
+    if as_json:
+        print_json(plans)
+    else:
+        for plan in plans:
+            title = ' '.join(plan['title'].split())
+            state = 'collapsed' if plan.get('collapsed') else 'expanded'
+            print('\t'.join((plan['window'], title, plan.get('color', 'default'),
+                             state, ' '.join(plan['tabs']))))
+
+
+def manage_tab_groups(args):
+    clients = {api._prefix[:-1]: api for api in create_clients_from_args(args)}
+    try:
+        requests = tab_group_requests(args, clients)
+        if getattr(args, 'dry_run', False):
+            preview_tab_groups(requests, args.json)
+            return 0
+    except KeyError as error:
+        print_error(f'No browser client available for {error.args[0]}')
+        return 1
+    except (OSError, ValueError, RuntimeError) as error:
+        print_error(str(error))
+        return 1
+
+    results = []
+    failed = False
+    for api, request in requests:
+        response = api.tab_group_command(request)
+        if not response['ok']:
+            failed = True
+            window = request.get('window_id')
+            target = api.prefix_tab(str(window)) if window is not None else api._prefix[:-1]
+            detail = f'{target}: {response["error"]}'
+            if 'groupId' in response:
+                group_id = api.prefix_tab(f'{window}.{response["groupId"]}')
+                detail += f' (created group {group_id})'
+            print_error(detail)
+            if args.group_action != 'list':
+                break
+            continue
+        if args.group_action == 'ungroup':
+            results.extend(api.prefix_tab(f'{request["window_id"]}.{tab}') for tab in response['tabIds'])
+            continue
+        groups = response['groups'] if args.group_action == 'list' else [response['group']]
+        results.extend({**group, 'id': api.prefix_tab(f'{group["windowId"]}.{group["id"]}')}
+                       for group in groups)
+    if args.json:
+        print_json(results)
+    elif args.group_action == 'ungroup':
+        for tab in results:
+            print(tab)
+    else:
+        for group in results:
+            title = ' '.join(group['title'].split())
+            state = 'collapsed' if group['collapsed'] else 'expanded'
+            print('\t'.join((group['id'], title, group['color'], state, str(group['tabCount']))))
+    return int(failed)
+
+
 def index_tabs(args):
     if args.tsv is None:
         args.tsv = in_temp_dir('tabs.tsv')
@@ -1278,6 +1396,15 @@ def add_tab_query_arguments(parser):
                                         'All other query arguments are ignored if this argument is present.')
 
 
+def add_tab_group_properties(parser, *, require_title=False):
+    parser.add_argument('--title', required=require_title, help='Visible name of the tab group')
+    parser.add_argument('--color', choices=('grey', 'blue', 'red', 'yellow', 'green',
+                                           'pink', 'purple', 'cyan', 'orange'))
+    state = parser.add_mutually_exclusive_group()
+    state.add_argument('--collapsed', dest='collapsed', action='store_const', const=True)
+    state.add_argument('--expanded', dest='collapsed', action='store_const', const=False)
+
+
 def build_parser():
     parser = ArgumentParser(
         formatter_class=make_help_formatter,
@@ -1313,6 +1440,24 @@ def build_parser():
                                   help='Only list tabs that are currently audible')
     parser_list_tabs.add_argument('--muted', action='store_true', default=False,
                                   help='Only list tabs that are muted')
+
+    parser_tab_groups = subparsers.add_parser('group', help='Manage native browser tab groups')
+    group_actions = parser_tab_groups.add_subparsers(dest='group_action', required=True)
+    parser_tab_groups.set_defaults(func=manage_tab_groups)
+    group_create = group_actions.add_parser('create', help='Create a named group from tab IDs')
+    group_ungroup = group_actions.add_parser('ungroup', help='Remove tabs from groups')
+    for group_action in (group_create, group_ungroup):
+        group_action.add_argument('tab_ids', nargs='*', help='Tab IDs from arguments or stdin').completer = complete_tab_ids
+        group_action.add_argument('--per-window', action='store_true',
+                                  help='Process tabs from each window separately')
+    add_tab_group_properties(group_create, require_title=True)
+    group_create.add_argument('--dry-run', action='store_true',
+                              help='Show selected tabs and proposed groups without changing them')
+    group_list = group_actions.add_parser('list', help='List native tab groups')
+    group_list.add_argument('--window', help='Restrict listing to <client>.<window>')
+    group_update = group_actions.add_parser('update', help='Rename, color, expand or collapse a group')
+    group_update.add_argument('group_id', help='Group ID from group list')
+    add_tab_group_properties(group_update)
 
     parser_close_tabs = subparsers.add_parser(
         'close',
